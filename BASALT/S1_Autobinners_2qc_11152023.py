@@ -858,67 +858,70 @@ def autobinners(softwares, assembly_file, depth_file, depth_file_list, Coverage_
         #     if item not in concoct_threshold:
         #         concoct_threshold.append(item)
 
-        cct_num=len(concoct_threshold)
-        num_threads_per_project=int(num_threads/cct_num)
-        pool=Pool(processes=len(concoct_threshold))        
-        for item in concoct_threshold:
-            concoct_folder_name=str(assembly_file)+'_'+str(item)+'_concoct_genomes'
-            genome_folders.append(concoct_folder_name)
-            if concoct_folder_name not in binning_ds.keys():
-                os.system('mkdir '+str(concoct_folder_name))
-                os.system('cp '+str(depth_file)+' '+str(pwd)+'/'+str(concoct_folder_name))
-                # concoct(concoct_assembly, pwd, concoct_depth, item, num_threads)
-                pool.apply_async(concoct, args=(concoct_assembly, pwd, concoct_depth, item, num_threads_per_project))
-        pool.close()
-        pool.join()
 
-        ids_seq={}
-        for record in SeqIO.parse(concoct_assembly, 'fasta'):
-            ids_seq[str(record.id).split('X')[1]]=str(record.seq)
+        if sensitive != 'quick':
+            cct_num=len(concoct_threshold)
+            num_threads_per_project=int(num_threads/cct_num)
+            pool=Pool(processes=len(concoct_threshold))        
+            for item in concoct_threshold:
+                concoct_folder_name=str(assembly_file)+'_'+str(item)+'_concoct_genomes'
+                genome_folders.append(concoct_folder_name)
+                if concoct_folder_name not in binning_ds.keys():
+                    os.system('mkdir '+str(concoct_folder_name))
+                    os.system('cp '+str(depth_file)+' '+str(pwd)+'/'+str(concoct_folder_name))
+                    # concoct(concoct_assembly, pwd, concoct_depth, item, num_threads)
+                    pool.apply_async(concoct, args=(concoct_assembly, pwd, concoct_depth, item, num_threads_per_project))
+            pool.close()
+            pool.join()
 
-        for threshold in concoct_threshold:
-            org_assembly=str(assembly_file)
-            concoct_genome=str(org_assembly)+'_'+str(threshold)+'_concoct_genomes'
-            concoct_checkm=str(org_assembly)+'_'+str(threshold)+'_concoct_checkm'
-            binset_checkm[concoct_genome]=concoct_checkm
+            ids_seq={}
+            for record in SeqIO.parse(concoct_assembly, 'fasta'):
+                ids_seq[str(record.id).split('X')[1]]=str(record.seq)
 
-            os.chdir(pwd+'/'+str(concoct_genome))
-            ids, n={}, 0
-            for line in open('clustering_gt1000.csv', 'r'):
-                n+=1
-                if n >= 2:
-                    contigs_ids=str(line).strip().split(',')[0].split('X')[1]
-                    bin_ids=str(line).strip().split(',')[1]
-                    if str(bin_ids) not in ids.keys():
-                        ids[str(bin_ids)]=[str(contigs_ids)]
-                    else:
-                        ids[str(bin_ids)].append(str(contigs_ids))
-            
-            for bins in ids.keys():
-                bin_name=str(concoct_genome)+'.'+str(bins)+'.fasta'
-                f=open(bin_name, 'w')
-                seq_len=0
-                for contigs in ids[bins]:
-                    f.write('>'+str(contigs)+'\n'+str(ids_seq[contigs])+'\n')
-                    seq_len+=len(ids_seq[contigs])
-                f.close()
+            for threshold in concoct_threshold:
+                org_assembly=str(assembly_file)
+                concoct_genome=str(org_assembly)+'_'+str(threshold)+'_concoct_genomes'
+                concoct_checkm=str(org_assembly)+'_'+str(threshold)+'_concoct_checkm'
+                binset_checkm[concoct_genome]=concoct_checkm
 
-                if seq_len >= 30000000:
-                    os.system('rm '+str(bin_name))
+                os.chdir(pwd+'/'+str(concoct_genome))
+                ids, n={}, 0
+                for line in open('clustering_gt1000.csv', 'r'):
+                    n+=1
+                    if n >= 2:
+                        contigs_ids=str(line).strip().split(',')[0].split('X')[1]
+                        bin_ids=str(line).strip().split(',')[1]
+                        if str(bin_ids) not in ids.keys():
+                            ids[str(bin_ids)]=[str(contigs_ids)]
+                        else:
+                            ids[str(bin_ids)].append(str(contigs_ids))
+                
+                for bins in ids.keys():
+                    bin_name=str(concoct_genome)+'.'+str(bins)+'.fasta'
+                    f=open(bin_name, 'w')
+                    seq_len=0
+                    for contigs in ids[bins]:
+                        f.write('>'+str(contigs)+'\n'+str(ids_seq[contigs])+'\n')
+                        seq_len+=len(ids_seq[contigs])
+                    f.close()
 
-            os.chdir(pwd)
-            # print('checking concoct bins with checkM')
-            # os.system('checkm lineage_wf -t '+str(num_threads)+' -x fasta '+str(concoct_genome)+' '+str(concoct_checkm))
-            print(org_assembly+' in '+str(threshold)+' Concoct autobinning done!')
-            print('----------')
-            fb=open('Basalt_log.txt','a')
-            fb.write(org_assembly+' in '+str(threshold)+' Concoct autobinning done!'+'\n')
-            fb.close()
-        try:
-            del ids_seq
-            gc.collect()
-        except:
-            xyo=0
+                    if seq_len >= 30000000:
+                        os.system('rm '+str(bin_name))
+
+                os.chdir(pwd)
+                # print('checking concoct bins with checkM')
+                # os.system('checkm lineage_wf -t '+str(num_threads)+' -x fasta '+str(concoct_genome)+' '+str(concoct_checkm))
+                print(org_assembly+' in '+str(threshold)+' Concoct autobinning done!')
+                print('----------')
+                fb=open('Basalt_log.txt','a')
+                fb.write(org_assembly+' in '+str(threshold)+' Concoct autobinning done!'+'\n')
+                fb.close()
+            try:
+                del ids_seq
+                gc.collect()
+            except:
+                xyo=0
+
 
         print('Running checkm with binsets gernerated from autobinner')
         fb=open('Basalt_log.txt','a')
