@@ -422,7 +422,34 @@ def modification_fa(extra_binset, start_index, pwd):
     print(mod_assembly_list)
     return mod_extra_binset, mod_assembly_list
 
-def data_feeding(extra_binset, datasets, start_index, num_threads, output_folder_name, qc, pe):
+def data_feeding(extra_binset, datasets, start_index, num_threads,
+                 output_folder_name, qc, pe):
+    """
+    Integrate external binsets into BASALT and recompute coverage/quality.
+
+    Parameters
+    ----------
+    extra_binset : list of str
+        List of paths to external binset folders.
+    datasets : dict
+        Mapping ``sample_id -> [r1_fastq, r2_fastq]`` with paired-end reads.
+    start_index : int
+        Starting index used to enumerate new assemblies and binsets.
+    num_threads : int
+        Number of threads for mapping and depth computation.
+    output_folder_name : str
+        Name of the target folder where fed data and metrics are stored.
+    qc : {'checkm', 'checkm2'}
+        Quality checking tool to use for the new binsets.
+    pe : {'y', 'n'}
+        Flag indicating whether PE-tracking modifications should be applied.
+
+    Returns
+    -------
+    None
+        Writes coverage matrices, connection files, CheckM outputs and
+        renamed binsets into ``output_folder_name``.
+    """
     pwd=os.getcwd()
     os.system('mkdir '+output_folder_name)
 

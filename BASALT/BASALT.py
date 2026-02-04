@@ -211,87 +211,134 @@ print('Binset(s) list:', str(binsets_list))
 if continue_mode == 'continue':
     continue_mode = 'last'
 
-# ---------------------------------------------------------------------------
-# Main execution: select quality check implementation and functional module
-# ---------------------------------------------------------------------------
-if QC_software == 'checkm2':
-    if len(data_feeding_folder) != 0:
-        from Data_feeding import *
-        if output_folder != 'Final_binset':
-            output_folder=output_folder+'_data_feeded'
-        else:
-            output_folder='Data_feeded'
-        data_feeding(data_feeding_folder, datasets, binsetindex, num_threads, output_folder, QC_software)
-        
-    elif len(binsets_list) != 0:
-        from S4_Multiple_Assembly_Comparitor_multiple_processes_bwt_10242023 import *
-        step='initial_drep' 
-        # coverage_list: Coverage maxtrix
-        # dataset: OK with both PE dataset or original datasets
-        multiple_assembly_comparitor_main(assembly_list, binsets_list, coverage_list, datasets, step, num_threads)
+def main():
+    """
+    Entry point for the BASALT command-line interface.
 
-    elif refinement_binset != '':
-        pwd=os.getcwd()
-        from S5_Outlier_remover_DL_11012023 import *
-        # coverage_list: Coverage maxtrix
-        # dataset: OK with both PE dataset or original datasets
-        # assembly_list: data feeded assembly
-        outlier_remover_main(refinement_binset, coverage_list, datasets, lr_list, hifi_list, assembly_list, pwd, num_threads)
+    This function parses command-line arguments (already configured in the
+    module-level ``parser``), normalises them into Python data structures,
+    and dispatches to the appropriate BASALT workflow depending on:
 
-    else:
-        from BASALT_main_d import * 
-        BASALT_main_d(assembly_list, datasets, num_threads, lr_list, hifi_list, hic_list, eb_list, ram, continue_mode, functional_module, sensitivity, refinement_paramter, max_ctn, min_cpn, pwd, QC_software, output_folder)
+    - quality control backend (CheckM2 vs. CheckM),
+    - selected functional module (autobinning / refinement / reassembly / all),
+    - whether data feeding or dereplication on existing binsets is requested.
 
-else:
-    if len(binsets_list) != 0:
-        from S4_Multiple_Assembly_Comparitor_multiple_processes_bwt_checkm import *
-        step='initial_drep' 
-        # coverage_list: Coverage maxtrix
-        # dataset: OK with both PE dataset or original datasets
-        multiple_assembly_comparitor_main(assembly_list, binsets_list, coverage_list, datasets, step, num_threads)
+    Returns
+    -------
+    None
+        Side effects include running the end-to-end BASALT pipeline and
+        writing results to the specified output folder.
+    """
+    # Main execution: select quality check implementation and functional module
+    if QC_software == 'checkm2':
+        if len(data_feeding_folder) != 0:
+            # Data feeding for CheckM2 branch
+            from Data_feeding import data_feeding
+            if output_folder != 'Final_binset':
+                output_folder = output_folder + '_data_feeded'
+            else:
+                output_folder = 'Data_feeded'
+            data_feeding(
+                data_feeding_folder, datasets, binsetindex,
+                num_threads, output_folder, QC_software, pe='y'
+            )
 
-    elif refinement_binset != '':
-        pwd=os.getcwd()
-        from S5_Outlier_remover_DL_checkm import *
-        # coverage_list: Coverage maxtrix
-        # dataset: OK with both PE dataset or original datasets
-        # assembly_list: data feeded assembly
-        outlier_remover_main(refinement_binset, coverage_list, datasets, assembly_list, pwd, num_threads)
+        elif len(binsets_list) != 0:
+            from S4_Multiple_Assembly_Comparitor_multiple_processes_bwt_10242023 import multiple_assembly_comparitor_main
+            step='initial_drep'
+            # coverage_list: Coverage matrix
+            # dataset: OK with both PE dataset or original datasets
+            multiple_assembly_comparitor_main(assembly_list, binsets_list, coverage_list, datasets, step, num_threads)
 
-    else:
-        if len(assembly_list) != 0:
-            if functional_module == 'autobinning' or functional_module == 'all':
-                from BASALT_main_c_autobinning import * 
-                BASALT_main_c_autobinning(assembly_list, datasets, num_threads, lr_list, hifi_list, hic_list, eb_list, ram, continue_mode, functional_module, sensitivity, refinement_paramter, max_ctn, min_cpn, pwd, QC_software, output_folder)
-
-            if functional_module == 'refinement' or functional_module == 'all':  
-                from BASALT_main_c_refinement import * 
-                BASALT_main_c_refinement(assembly_list, datasets, num_threads, lr_list, hifi_list, hic_list, eb_list, ram, continue_mode, functional_module, sensitivity, refinement_paramter, max_ctn, min_cpn, pwd, QC_software, output_folder)
-
-            if functional_module == 'reassembly' or functional_module == 'all':
-                from BASALT_main_c_re_assembly import * 
-                BASALT_main_c_re_assembly(assembly_list, datasets, num_threads, lr_list, hifi_list, hic_list, eb_list, ram, continue_mode, functional_module, sensitivity, refinement_paramter, max_ctn, min_cpn, pwd, QC_software, output_folder)
-
-            # from BASALT_main_c import * 
-            # BASALT_main_c(assembly_list, datasets, num_threads, lr_list, hifi_list, hic_list, eb_list, ram, continue_mode, functional_module, sensitivity, refinement_paramter, max_ctn, min_cpn, pwd, QC_software, output_folder)
-        
-            if len(data_feeding_folder) != 0:
-                pwd=os.getcwd()
-                from BASALT_main_c_datafeeding import *
-                data_feeding_main(assembly_list, datasets, num_threads, data_feeding_folder, pwd, QC_software, output_folder, binsetindex, continue_mode)
-            
-            from Cleanup import cleanup
-            cleanup(assembly_list)
-            print('All accomplish!')
+        elif refinement_binset != '':
+            pwd=os.getcwd()
+            from S5_Outlier_remover_DL_11012023 import outlier_remover_main
+            # coverage_list: Coverage matrix
+            # dataset: OK with both PE dataset or original datasets
+            # assembly_list: data feeded assembly
+            outlier_remover_main(refinement_binset, coverage_list, datasets, lr_list, hifi_list, assembly_list, pwd, num_threads)
 
         else:
-            if len(data_feeding_folder) != 0:
-                from Data_feeding import *
-                if output_folder != 'Final_binset':
-                    output_folder=output_folder+'_data_feeded'
-                else:
-                    output_folder='Data_feeded'
-                pe='y'
+            from BASALT_main_d import BASALT_main_d
+            BASALT_main_d(
+                assembly_list, datasets, num_threads, lr_list, hifi_list,
+                hic_list, eb_list, ram, continue_mode, functional_module,
+                sensitivity, refinement_paramter, max_ctn, min_cpn, pwd,
+                QC_software, output_folder
+            )
 
-                data_feeding(data_feeding_folder, datasets, binsetindex, num_threads, output_folder, QC_software, pe)
+    else:
+        if len(binsets_list) != 0:
+            from S4_Multiple_Assembly_Comparitor_multiple_processes_bwt_checkm import multiple_assembly_comparitor_main
+            step='initial_drep'
+            # coverage_list: Coverage matrix
+            # dataset: OK with both PE dataset or original datasets
+            multiple_assembly_comparitor_main(assembly_list, binsets_list, coverage_list, datasets, step, num_threads)
+
+        elif refinement_binset != '':
+            pwd=os.getcwd()
+            from S5_Outlier_remover_DL_checkm import outlier_remover_main
+            # coverage_list: Coverage matrix
+            # dataset: OK with both PE dataset or original datasets
+            # assembly_list: data feeded assembly
+            outlier_remover_main(refinement_binset, coverage_list, datasets, assembly_list, pwd, num_threads)
+
+        else:
+            if len(assembly_list) != 0:
+                if functional_module == 'autobinning' or functional_module == 'all':
+                    from BASALT_main_c_autobinning import BASALT_main_c_autobinning
+                    BASALT_main_c_autobinning(
+                        assembly_list, datasets, num_threads, lr_list, hifi_list,
+                        hic_list, eb_list, ram, continue_mode, functional_module,
+                        sensitivity, refinement_paramter, max_ctn, min_cpn, pwd,
+                        QC_software, output_folder
+                    )
+
+                if functional_module == 'refinement' or functional_module == 'all':
+                    from BASALT_main_c_refinement import BASALT_main_c_refinement
+                    BASALT_main_c_refinement(
+                        assembly_list, datasets, num_threads, lr_list, hifi_list,
+                        hic_list, eb_list, ram, continue_mode, functional_module,
+                        sensitivity, refinement_paramter, max_ctn, min_cpn, pwd,
+                        QC_software, output_folder
+                    )
+
+                if functional_module == 'reassembly' or functional_module == 'all':
+                    from BASALT_main_c_re_assembly import BASALT_main_c_re_assembly
+                    BASALT_main_c_re_assembly(
+                        assembly_list, datasets, num_threads, lr_list, hifi_list,
+                        hic_list, eb_list, ram, continue_mode, functional_module,
+                        sensitivity, refinement_paramter, max_ctn, min_cpn, pwd,
+                        QC_software, output_folder
+                    )
+
+                if len(data_feeding_folder) != 0:
+                    pwd = os.getcwd()
+                    from BASALT_main_c_datafeeding import data_feeding_main
+                    data_feeding_main(
+                        assembly_list, datasets, num_threads, data_feeding_folder,
+                        pwd, QC_software, output_folder, binsetindex, continue_mode
+                    )
+
+                from Cleanup import cleanup
+                cleanup(assembly_list)
+                print('All accomplish!')
+
+            else:
+                if len(data_feeding_folder) != 0:
+                    from Data_feeding import data_feeding
+                    if output_folder != 'Final_binset':
+                        output_folder = output_folder + '_data_feeded'
+                    else:
+                        output_folder = 'Data_feeded'
+                    pe = 'y'
+
+                    data_feeding(
+                        data_feeding_folder, datasets, binsetindex,
+                        num_threads, output_folder, QC_software, pe
+                    )
+
+
+if __name__ == '__main__':
+    main()
 

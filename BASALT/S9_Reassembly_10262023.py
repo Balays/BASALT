@@ -13,6 +13,27 @@ from multiprocessing import Pool
 
 
 def mod_bin(binset_folder):
+    """
+    Create a re-indexed version of a binset with sequential bin IDs
+    (CheckM2 branch).
+
+    Parameters
+    ----------
+    binset_folder : str
+        Folder containing the original per-bin FASTA and CheckM2
+        ``quality_report.tsv`` output.
+
+    Returns
+    -------
+    str
+        Name of the new binset folder (``<binset_folder>_mod``).
+    str
+        Path to the combined ``Total_bins.fa`` in the working directory.
+    list of str
+        List of new bin IDs (``bin1``, ``bin2``, ...).
+    dict
+        Mapping ``bin_id -> quality_metrics`` parsed from the quality report.
+    """
     pwd=os.getcwd()
     bins_checkm={}
     try:
@@ -94,7 +115,30 @@ def mod_bin(binset_folder):
     os.chdir(pwd)
     return str(binset_folder)+'_mod', 'Total_bins.fa', mod_bin_list, bins_checkm
 
+
 def parse_sam(sam_file, fq, pair, n):
+    """
+    Parse Bowtie2 SAM output and split paired reads by bin (CheckM2 branch).
+
+    Parameters
+    ----------
+    sam_file : str
+        Path to the SAM file produced by Bowtie2.
+    fq : dict
+        Mapping ``bin_id -> dict(read_id -> int)`` tracking how many
+        mates of a read pair have been written.
+    pair : dict
+        Temporary mapping ``bin_id -> dict(read_id -> int)`` used to
+        count paired hits before writing FASTQ records.
+    n : int
+        Dataset index, used to prefix read IDs.
+
+    Returns
+    -------
+    None
+        Writes bin-specific paired-end FASTQ files and a summary file
+        ``Bin_reads_summary.txt`` in the working directory.
+    """
     print('Reading reads id')
     f_not_mapped_reads=open('Not_mapped_reads.txt','a')
     m, m1, m2 = 0, 0, 0
@@ -155,9 +199,27 @@ def parse_sam(sam_file, fq, pair, n):
         if m % 1000000 == 0:
             print('Parsed', m,'lines')
     f_not_mapped_reads.close()
-    # return fq
+
 
 def parse_lr_sam(sam_file, long_read, sn):
+    """
+    Group long reads by bin based on SAM alignments (CheckM2 branch).
+
+    Parameters
+    ----------
+    sam_file : str
+        Path to the SAM file produced by mapping long reads to bins.
+    long_read : str
+        Path to the original long-read FASTQ file.
+    sn : int
+        Index of the long-read file, used in output naming.
+
+    Returns
+    -------
+    dict
+        Mapping ``bin_id -> dict(long_read_id -> None)`` indicating which
+        long reads map to each bin.
+    """
     print('Reading long reads id '+str(long_read))
     # f_not_mapped_reads=open('Not_mapped_reads.txt','w')
     bin_lr, bin_lr2, lr_bin, lr_bin2 = {}, {}, {}, {}
@@ -254,7 +316,30 @@ def parse_lr_sam(sam_file, long_read, sn):
     print('Long reads '+str(long_read)+' splitting done!')
     return bin_lr
 
+
 def mapping_sr(total_fa, datasets_list, fq, pair, num_threads):
+    """
+    Map short reads to bins and prepare bin-specific FASTQ files
+    for reassembly (CheckM2 branch).
+
+    Parameters
+    ----------
+    total_fa : str
+        Path to the concatenated bin FASTA file used as mapping reference.
+    datasets_list : dict
+        Mapping ``sample_id -> [r1_fastq, r2_fastq]`` with paired-end reads.
+    fq : dict
+        Mapping ``bin_id -> dict(read_id -> int)`` used to track mates.
+    pair : dict
+        Temporary mapping used when counting paired hits.
+    num_threads : int
+        Number of Bowtie2 threads to use.
+
+    Returns
+    -------
+    None
+        Writes bin-specific FASTQ files and summary statistics to disk.
+    """
     os.system('bowtie2-build '+str(total_fa)+' '+str(total_fa))
     n = 0
     for item in datasets_list.keys():
@@ -295,7 +380,35 @@ def parse_checkm(checkm_containing_folder,pwd):
                             bins_checkm[genome_ids]['Contamination']=float(contamination)
     return bins_checkm
 
-def reassembly(bin_seq, reassembly_bin_folder, num_threads, bins_seq_folder, long_read, ram, pwd):
+
+def reassembly(bin_seq, reassembly_bin_folder, num_threads, bins_seq_folder,
+               long_read, ram, pwd):
+    """
+    Perform short-read-based reassembly for each bin using SPAdes and IDBA-UD.
+
+    Parameters
+    ----------
+    bin_seq : dict
+        Mapping ``bin_id -> [r1_fastq, r2_fastq]`` with bin-specific reads.
+    reassembly_bin_folder : str
+        Folder where reassembled bin FASTA files will be written.
+    num_threads : int
+        Number of threads for SPAdes and IDBA-UD.
+    bins_seq_folder : str
+        Folder holding bin-specific short-read FASTQ files.
+    long_read : list of str
+        List of long-read FASTQ files (currently only used for deciding
+        hybrid settings).
+    ram : int
+        Maximum RAM (in GB) available to assemblers.
+    pwd : str
+        Working directory path.
+
+    Returns
+    -------
+    None
+        Writes reassembled contig FASTA files into ``reassembly_bin_folder``.
+    """
     for item in bin_seq.keys():
         os.system('spades.py -1 '+str(bin_seq[item][0])+' -2 '+str(bin_seq[item][1])+' -o '+str(item)+'_spades_reassembly --careful -t '+str(num_threads)+' -m '+str(ram))
         os.chdir(str(pwd)+'/'+str(item)+'_spades_reassembly')
@@ -351,7 +464,38 @@ def unicycler_mul(item, pwd, sr_folder, bin_seq, bin_lr, t_p_p, reassembly_bin_f
     os.system('mv '+str(bin_lr[item])+' '+str(pwd)+'/'+str(bins_seq_folder))
     os.system('rm -rf '+str(item)+'_unicycler_reassembly')
 
-def reassembly_lr(bin_seq, bin_lr, reassembly_bin_folder, num_threads, bins_seq_folder, sr_folder, ram, pwd):
+def reassembly_lr(bin_seq, bin_lr, reassembly_bin_folder, num_threads,
+                  bins_seq_folder, sr_folder, ram, pwd):
+    """
+    Perform hybrid reassembly of bins using both short and long reads
+    (CheckM2 branch).
+
+    Parameters
+    ----------
+    bin_seq : dict
+        Mapping ``bin_id -> [r1_fastq, r2_fastq]`` with bin-specific
+        short reads.
+    bin_lr : dict
+        Mapping ``bin_id -> long_read_fastq`` with bin-specific long reads.
+    reassembly_bin_folder : str
+        Folder where hybrid reassembled bin FASTA files will be written.
+    num_threads : int
+        Number of threads to use for the hybrid assembler.
+    bins_seq_folder : str
+        Folder holding bin-specific short-read FASTQ files.
+    sr_folder : str
+        Folder used for intermediate short-read assemblies.
+    ram : int
+        Maximum RAM (in GB) available to assemblers.
+    pwd : str
+        Working directory path.
+
+    Returns
+    -------
+    None
+        Writes hybrid reassembled contig FASTA files into
+        ``reassembly_bin_folder``.
+    """
     try:
         os.system('java -Xmx'+str(ram)+'G -jar pilon-1.23.jar')
     except:
@@ -477,7 +621,33 @@ def bin_comparison(paired_bins, bin_checkm):
     f.close()
     return best_bin, best_bin_checkm
 
-def re_assembly_main(binset_folder, datasets_list, long_read, hybri_reassembly, ram, num_threads):
+def re_assembly_main(binset_folder, datasets_list, long_read,
+                     hybri_reassembly, ram, num_threads):
+    """
+    Entry point for S9 short-read reassembly (CheckM2 branch).
+
+    Parameters
+    ----------
+    binset_folder : str
+        Folder containing the starting binset.
+    datasets_list : dict
+        Mapping ``sample_id -> [r1_fastq, r2_fastq]`` with paired-end reads.
+    long_read : list of str
+        List of long-read FASTQ files used for optional hybrid reassembly.
+    hybri_reassembly : {'y', 'n'}
+        Flag controlling whether hybrid reassembly should be performed.
+    ram : int
+        Maximum RAM (in GB) available to assemblers.
+    num_threads : int
+        Number of threads to use for mapping and assembly.
+
+    Returns
+    -------
+    None
+        Coordinates mapping, short-read reassembly, optional long-read
+        reassembly, and CheckM-based bin selection; results are written
+        to ``<binset_folder>_re-assembly_binset`` and related folders.
+    """
     pwd=os.getcwd()
     try:
         f=open('Assembly_status.txt','a')

@@ -19,6 +19,25 @@ from multiprocessing import Pool
 # from Outlier_remover import *
 
 def test_outlier(connecting_contig, item_data, test_index, coff):
+    """
+    Test whether a contig is an outlier based on PCA-transformed coverage.
+
+    Parameters
+    ----------
+    connecting_contig : str
+        Contig identifier being tested.
+    item_data : list or np.ndarray
+        PCA scores for all contigs.
+    test_index : int
+        Index of the contig in ``item_data``.
+    coff : float
+        Multiplier for IQR to define upper/lower thresholds.
+
+    Returns
+    -------
+    int
+        1 if contig passes the outlier test (kept), 0 otherwise.
+    """
     # print('Judging', connecting_contig
     four = pd.Series(item_data).describe()
     # print(four)
@@ -37,6 +56,9 @@ def test_outlier(connecting_contig, item_data, test_index, coff):
     return stat
 
 def PCA_slector(data_array, num_contig):
+    """
+    Perform 1D PCA on coverage vectors to summarise contig profiles.
+    """
     pca = PCA(n_components=1)
     pca.fit(data_array)
     explained_variance_ratio=pca.explained_variance_ratio_
@@ -54,6 +76,9 @@ def PCA_slector(data_array, num_contig):
     return newData_list_item, explained_variance_ratio
 
 def coverage_filtration_bin_mpt(bin_connecting_contigs_total, bin_contig_cov, contig_cov, selected_1st, bin_extract_contig, elemimated_contig, bin, m, coff):
+    """
+    Perform coverage-based filtration of connecting contigs for a bin.
+    """
     print('Bin-'+str(m)+' '+bin, 'coverage filtration of single copy contigs: bins with mt')
     for connecting_contig in bin_connecting_contigs_total[bin].keys():
         test_contig_bin_cov={}

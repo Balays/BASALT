@@ -14,7 +14,27 @@ import os, copy, math, glob, gc
 import numpy as np
 from multiprocessing import Pool
 
-def TNF_coverage_matrix(bin_contigs, bin_id, contigs_depth, ccc, contigs_kmer, contigs_kmer2):
+
+def TNF_coverage_matrix(bin_contigs, bin_id, contigs_depth, ccc,
+                        contigs_kmer, contigs_kmer2):
+    """
+    Write TNF and coverage features for all contigs within a bin.
+
+    Parameters
+    ----------
+    bin_contigs : dict
+        Mapping bin_id -> {contig_id -> contig_length}.
+    bin_id : str
+        Current bin identifier.
+    contigs_depth : dict
+        Mapping contig_id -> {cov_index -> depth}.
+    ccc : dict
+        Mapping bin_id -> contig_id -> coverage change ratios.
+    contigs_kmer : dict
+        Mapping contig_id -> k-mer feature vector.
+    contigs_kmer2 : dict
+        Helper dict used to mark contigs processed.
+    """
     fout=open(str(bin_id)+'_contig_depth_TNF_matrix.txt','a')
     for contigs in bin_contigs[bin_id].keys():
         try:
@@ -29,7 +49,26 @@ def TNF_coverage_matrix(bin_contigs, bin_id, contigs_depth, ccc, contigs_kmer, c
             xyzzz=0
     fout.close()
 
-def bin_kmer(kmer, contigs_bin, contigs_bin2, bin_contigs, contigs_depth, ccc):
+def bin_kmer(kmer, contigs_bin, contigs_bin2, bin_contigs,
+             contigs_depth, ccc):
+    """
+    Distribute k-mer features from a global k-mer file into per-bin matrices.
+
+    Parameters
+    ----------
+    kmer : str
+        Path to the k-mer feature file.
+    contigs_bin : dict
+        Mapping contig_id -> list of bins containing that contig.
+    contigs_bin2 : dict
+        Mapping contig_id -> number of bins containing it.
+    bin_contigs : dict
+        Mapping bin_id -> {contig_id -> contig_length}.
+    contigs_depth : dict
+        Mapping contig_id -> {cov_index -> depth}.
+    ccc : dict
+        Mapping bin_id -> contig_id -> coverage change ratios.
+    """
     n=0
     for line in open(kmer,'r'):
         n+=1
@@ -51,6 +90,27 @@ def bin_kmer(kmer, contigs_bin, contigs_bin2, bin_contigs, contigs_depth, ccc):
                 xyzzz=0
 
 def basic_information(bin_folder, depth_list, kmer_list, pwd, num_threads):
+    """
+    Collect basic information needed for DL outlier detection.
+
+    Parameters
+    ----------
+    bin_folder : str
+        Folder containing bin FASTA files.
+    depth_list : list of str
+        List of depth matrix filenames.
+    kmer_list : list of str
+        List of k-mer feature file paths.
+    pwd : str
+        Working directory.
+    num_threads : int
+        Number of processes to use when distributing k-mer features.
+
+    Returns
+    -------
+    tuple
+        (depth_TNF_matrix_file, contigs_depth, ccc, num_cov, bin_contigs_seq)
+    """
     print('Reading basic information')
     # f=open('BestBinset.fasta','w')
     bin_contigs, bin_contigs_seq, total_contigs, bin_name, contigs_bin, contigs_bin2 = {}, {}, {}, {}, {}, {}
@@ -144,7 +204,36 @@ def basic_information(bin_folder, depth_list, kmer_list, pwd, num_threads):
     # os.chdir(pwd)
     return 'Bin_contig_depth_TNF_matrix.txt', contigs_depth, ccc, num, bin_contigs_seq
 
-def outlier_predictor(depth_TNF_matrix, contigs_depth, bin_contigs, datasets, lr, hifi_list, num_threads, nx):
+def outlier_predictor(depth_TNF_matrix, contigs_depth, bin_contigs,
+                      datasets, lr, hifi_list, num_threads, nx):
+    """
+    Run DL-based outlier prediction and summarise contig/bins statistics.
+
+    Parameters
+    ----------
+    depth_TNF_matrix : str
+        Path to the combined depth+TNF feature matrix.
+    contigs_depth : dict
+        Mapping contig_id -> {cov_index -> depth}.
+    bin_contigs : dict
+        Mapping bin_id -> {contig_id -> sequence}.
+    datasets : dict
+        Mapping dataset_id -> [R1, R2] short-read files.
+    lr : list of str
+        Long-read datasets (ONT/PB).
+    hifi_list : list of str
+        HiFi read datasets.
+    num_threads : int
+        Number of threads for remapping and depth testing.
+    nx : int
+        Unused parameter kept for compatibility.
+
+    Returns
+    -------
+    tuple
+        (confirmed_outlier, contig_clean_status, bin_avg_coverage,
+         bin_core_contig_num)
+    """
     print('Predicting potential outliers')
     os.system('ensemble.py')
     # outlier_predictor.py
@@ -459,6 +548,22 @@ def outlier_predictor(depth_TNF_matrix, contigs_depth, bin_contigs, datasets, lr
     return contig_status, bin_avg_coverage, confirmed_outlier
 
 def checkm_eval(bin_contigs, bin_folder, confirmed_outlier, pwd, num_threads):
+    """
+    Evaluate outlier removal using CheckM2 for each bin.
+
+    Parameters
+    ----------
+    bin_contigs : dict
+        Mapping bin_id -> {contig_id -> sequence}.
+    bin_folder : str
+        Original BestBinset folder name.
+    confirmed_outlier : dict
+        Mapping bin_id -> list of contig_ids marked as outliers.
+    pwd : str
+        Working directory.
+    num_threads : int
+        Number of threads for CheckM2.
+    """
     outlier_binset=bin_folder+'_outlier_refined'
     os.system('mkdir '+outlier_binset)
     os.chdir(outlier_binset) 
@@ -537,9 +642,40 @@ def checkm_eval(bin_contigs, bin_folder, confirmed_outlier, pwd, num_threads):
     os.chdir(pwd)
 
 def kmer_cal(input_file, output_file):
+    """
+    Calculate k-mer features for the given FASTA and write to output file.
+    """
     os.system('calc.kmerfreq.pl -i '+str(input_file)+' -o '+str(output_file))
 
-def outlier_remover_main(bin_folder, depth_list, datasets, lr, hifi_list, assemblies_list, pwd, num_threads):
+def outlier_remover_main(bin_folder, depth_list, datasets, lr, hifi_list,
+                         assemblies_list, pwd, num_threads):
+    """
+    Entry point for S5 (CheckM2 branch): DL-based outlier removal.
+
+    Parameters
+    ----------
+    bin_folder : str
+        Folder containing original BestBinset bins.
+    depth_list : list of str
+        List of coverage matrix files used for feature extraction.
+    datasets : dict
+        Mapping dataset_id -> [R1, R2] short-read files.
+    lr : list of str
+        Long-read datasets (ONT/PB).
+    hifi_list : list of str
+        HiFi read datasets.
+    assemblies_list : list of str
+        List of modified assembly filenames.
+    pwd : str
+        Working directory.
+    num_threads : int
+        Number of threads to use.
+
+    Returns
+    -------
+    None
+        Writes refined binsets and intermediate logs to disk.
+    """
     # kmer_list=glob.glob(r'*.kmer.txt')
     # if len(kmer_list)==0:
     kmer_list=[]

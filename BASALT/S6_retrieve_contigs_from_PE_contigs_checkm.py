@@ -19,6 +19,9 @@ from multiprocessing import Pool
 # from Outlier_remover import *
 
 def coverage_matrix_mpt(coverage_matrix_file, num):
+    """
+    Parse coverage matrix file and return contig-wise coverage dict (CheckM).
+    """
     contig_cov={}
     n=0
     for line in open(str(coverage_matrix_file),'r'):
@@ -122,6 +125,9 @@ def record_bin_coverage(binset, num_threads, coverage_matrix_list):
     return bin_contig_cov, bin_contigs, contig_cov
 
 def cycle_mt(bin_connecting_contigs, bin_connecting_contigs2, connections, bins):
+    """
+    Expand connecting contig sets by traversing PE connection graph (CheckM).
+    """
     m, m_before, m_after=1, 0, 1
     print('Parsing', bins)
     while m <= 1: ### Consider connection level less than 2

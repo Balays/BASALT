@@ -18,6 +18,25 @@ from time import ctime,sleep
 
 
 def intervalue(Xmin, Xmax, Y, Z):
+    """
+    Helper function to compute the upper bound of a coverage bin.
+
+    Parameters
+    ----------
+    Xmin : float
+        Lower bound of the range.
+    Xmax : float
+        Upper bound of the range.
+    Y : float
+        Step size within the range.
+    Z : float
+        Observed coverage value.
+
+    Returns
+    -------
+    float
+        Upper bound of the bin in which Z falls.
+    """
     delta=Xmax-Xmin
     tim=int(delta/Y)
     for i in range(1, tim+2):
@@ -27,6 +46,19 @@ def intervalue(Xmin, Xmax, Y, Z):
             return Xmin
 
 def covrange(X):
+    """
+    Map a coverage value to a coarse-grained coverage range code.
+
+    Parameters
+    ----------
+    X : float
+        Coverage value.
+
+    Returns
+    -------
+    str
+        Four-character string representing the coverage range.
+    """
     if float(X)==0:
         return '0000'
     elif float(X) > 0 and  float(X) < 9:
@@ -56,6 +88,19 @@ def covrange(X):
         return '10000'
 
 def dcovrange(X):
+    """
+    Map a coverage value to a denser coverage range code for derivatives.
+
+    Parameters
+    ----------
+    X : float
+        Coverage value.
+
+    Returns
+    -------
+    str
+        Four-character string representing the coverage range for delta coverage.
+    """
     if float(X)==0:
         return '0000'
     elif float(X) > 0 and float(X) < 9:
@@ -81,6 +126,24 @@ def dcovrange(X):
 
     
 def CoverageMatrix(depth_file, assembly_name):
+    """
+    Build a coverage matrix for binning from a depth file.
+
+    Parameters
+    ----------
+    depth_file : str
+        Path to the depth file produced from read mapping.
+    assembly_name : str
+        Name of the assembly (used in output filenames).
+
+    Returns
+    -------
+    tuple
+        (cov_dict, covgs_header, matrix_filename)
+        where cov_dict maps contig_id -> coverage features,
+        covgs_header is the header string, and matrix_filename
+        is the name of the coverage matrix file.
+    """
     path=os.getcwd()
 
     fout=open('Coverage_matrix_for_binning_'+str(assembly_name)+'.txt', 'w')
@@ -121,7 +184,37 @@ def CoverageMatrix(depth_file, assembly_name):
     fout.close()
     return cov, covgs, 'Coverage_matrix_for_binning_'+str(assembly_name)+'.txt'
 
-def BinAbundance(depth, cov, covgs, output_format, name_of_the_binning_project, path, genome_summary_dict, genome_summary_dict2, gen_sum):
+def BinAbundance(depth, cov, covgs, output_format, name_of_the_binning_project,
+                 path, genome_summary_dict, genome_summary_dict2, gen_sum):
+    """
+    Compute bin-level abundance statistics and write summary files.
+
+    Parameters
+    ----------
+    depth : str
+        Depth file path.
+    cov : dict
+        Per-contig coverage features from ``CoverageMatrix``.
+    covgs : str
+        Header string for coverage matrix.
+    output_format : str
+        Bin file extension ('fa' or 'fasta').
+    name_of_the_binning_project : str
+        Prefix for summary filenames.
+    path : str
+        Base path of the binning project (assembly-specific).
+    genome_summary_dict : dict
+        Dictionary to be updated with contig summary filenames.
+    genome_summary_dict2 : dict
+        Dictionary to be updated with genome average coverages.
+    gen_sum : dict
+        Dictionary used to store sorted genome summaries.
+
+    Returns
+    -------
+    tuple
+        (genome_contig_dict, genome_summary_dict, genome_summary_dict2, gen_sum)
+    """
     # os.chdir(path+'_genomes')
     genome_contig, genome_contig2={}, {}
     # try:
@@ -313,7 +406,29 @@ def BinAbundance(depth, cov, covgs, output_format, name_of_the_binning_project, 
     # os.chdir(path)
     return 'prebinned_genomes_output_for_dataframe_'+str(name_of_the_binning_project)+'.txt'
 
-def GenerationOfGenomeGroupList(prebin_dataframe, PE_connection_file, name_of_the_binning_project, pwd, path):
+def GenerationOfGenomeGroupList(prebin_dataframe, PE_connection_file,
+                                name_of_the_binning_project, pwd, path):
+    """
+    Partition bins into genome groups based on PE connections.
+
+    Parameters
+    ----------
+    prebin_dataframe : str
+        Filename of pre-binning genome summary.
+    PE_connection_file : str
+        Filename of PE connection summary.
+    name_of_the_binning_project : str
+        Name of the binning project (used for output).
+    pwd : str
+        Working directory.
+    path : str
+        Base path of the binning project.
+
+    Returns
+    -------
+    dict
+        Mapping group_id -> list of bin names within that group.
+    """
     print('---------------------------')
     print('Reading PE-connections file')
 
@@ -409,13 +524,45 @@ def GenerationOfGenomeGroupList(prebin_dataframe, PE_connection_file, name_of_th
         xyzt=0
     return genome_total_connection_file
 
-def multi_threads(pwd, depth_file, cov, covs, bin_format, bin_folder, genome_summary_dict, genome_summary_dict2, gen_sum, PE_connections_file):
+def multi_threads(pwd, depth_file, cov, covs, bin_format, bin_folder,
+                  genome_summary_dict, genome_summary_dict2, gen_sum,
+                  PE_connections_file):
+    """
+    Worker function to run BinAbundance and genome grouping for one bin folder.
+
+    Parameters mirror ``CoverageMatrix`` and ``BinAbundance``, but are
+    used per (assembly, bin_folder) combination.
+    """
     path=pwd+'/'+bin_folder
     a=BinAbundance(depth_file, cov, covs, bin_format, bin_folder, path, genome_summary_dict, genome_summary_dict2, gen_sum)
     GenerationOfGenomeGroupList(a, PE_connections_file, bin_folder, pwd, path)
     # GenerationOfGenomeGroupList(BinAbundance(depth_file, cov, covs, bin_format, bin_folder, path, genome_summary_dict, genome_summary_dict2, gen_sum), PE_connections_file, bin_folder, pwd, path)
 
-def binsabundance_pe_connections(assembly_binning_group, depth_files, PE_connections_files, assembly_names, num_threads):
+def binsabundance_pe_connections(assembly_binning_group, depth_files,
+                                 PE_connections_files, assembly_names,
+                                 num_threads):
+    """
+    Entry point for S2: compute bin abundance and PE connections.
+
+    Parameters
+    ----------
+    assembly_binning_group : dict
+        Mapping group_id -> list of bin folder names corresponding
+        to assemblies within that group.
+    depth_files : dict
+        Mapping group_id -> depth file path for that group.
+    PE_connections_files : dict
+        Mapping group_id -> PE connection filename.
+    assembly_names : dict
+        Mapping group_id -> assembly name.
+    num_threads : int
+        Number of threads used for multiprocessing.
+
+    Returns
+    -------
+    dict
+        Mapping group_id -> path to coverage matrix file for the group.
+    """
     print('-------------------------------')
     print('Processing Step2')
     print(str(assembly_binning_group))

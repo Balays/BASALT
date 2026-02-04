@@ -26,6 +26,20 @@ from utils import norm
 
 
 def read_raw_data(split):
+    """
+    Read raw text feature files for a given split.
+
+    Parameters
+    ----------
+    split : {'train', 'val', 'test'}
+        Dataset split to read.
+
+    Returns
+    -------
+    list of str
+        List of raw text lines aggregated from all files belonging to
+        the requested split.
+    """
     lines = []
     if split == 'train':
         for p in glob(r'./train/*.txt'):

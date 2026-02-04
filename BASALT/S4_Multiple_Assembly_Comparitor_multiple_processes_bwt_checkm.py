@@ -15,7 +15,11 @@ import numpy as np
 from sklearn.decomposition import PCA
 import glob
 
+
 def Contigs_aligner(Contigs_assembly1, num_threads):
+    """
+    Run all-vs-all BLASTn of contigs within a single assembly (CheckM branch).
+    """
     print('Using BLAST to align '+Contigs_assembly1+' to '+Contigs_assembly1)
     # try:
     blast_output=str(Contigs_assembly1)+'_vs_'+str(Contigs_assembly1)+'.txt'
@@ -46,6 +50,9 @@ def Contigs_aligner(Contigs_assembly1, num_threads):
     return 'Filtrated_'+str(Contigs_assembly1)+'_vs_'+str(Contigs_assembly1)+'.txt'
 
 def Sequence_length_recorder(ORF):
+    """
+    Record sequence lengths for all contigs in a FASTA file.
+    """
     print('Reading '+ORF+' Contigs length')
     seq_len={}
     for record in SeqIO.parse(ORF,'fasta'):
@@ -54,6 +61,9 @@ def Sequence_length_recorder(ORF):
     return seq_len
 
 def PCA_slector(data_array, num_contig):
+    """
+    Perform 1D PCA on coverage vectors to summarise contig profiles.
+    """
     pca = PCA(n_components=1)
     pca.fit(data_array)
     explained_variance_ratio=pca.explained_variance_ratio_
@@ -70,7 +80,11 @@ def PCA_slector(data_array, num_contig):
             newData_list_item=item
     return newData_list_item, explained_variance_ratio
 
-def core_contigs_filtration(bin_contig_cov, bin_contig, contig_cov, folder_binset, contig_file):
+def core_contigs_filtration(bin_contig_cov, bin_contig, contig_cov,
+                            folder_binset, contig_file):
+    """
+    Select core contigs for each bin based on coverage IQR and PCA (CheckM).
+    """
     pwd=os.getcwd()
     print('Filtrating core contigs')
 
@@ -270,7 +284,11 @@ def core_contigs_filtration(bin_contig_cov, bin_contig, contig_cov, folder_binse
 
     return core_contigs2, core_contigs_IQR_ave_coverage
 
-def bin_depth_normalization(target_bin, bin_dict, binset_coverage_total, contigs_coverage, pwd, num_threads):
+def bin_depth_normalization(target_bin, bin_dict, binset_coverage_total,
+                            contigs_coverage, pwd, num_threads):
+    """
+    Normalise bin depth across samples for a target bin and its neighbours.
+    """
     # try:
     #     f=open(target_bin+'_bins_depth_comparison.txt','a')
     #     f.close()
@@ -334,7 +352,11 @@ def bin_depth_normalization(target_bin, bin_dict, binset_coverage_total, contigs
             f.close()
             os.system('mv Filtrated_'+str(bin2)+'_vs_'+str(bin1)+'.txt '+pwd+'/bin_comparison_folder')
 
-def TNFs_refiner(binset, assembly, coverage_refined_folder, threshold, pwd, num_threads):
+def TNFs_refiner(binset, assembly, coverage_refined_folder, threshold,
+                 pwd, num_threads):
+    """
+    Refine bins based on tetranucleotide frequencies (TNFs) (CheckM).
+    """
     os.system('mkdir '+binset+'_TNFs_outliner')
     os.system('mkdir '+binset+'_TNFs')
     print('Calculating TNFs of '+assembly)
@@ -426,7 +448,11 @@ def TNFs_refiner(binset, assembly, coverage_refined_folder, threshold, pwd, num_
     except:
         gzaa=0
 
-def genome_contigs_recorder(binset, binset_record, binset_genome_size, coverage_matrix):
+def genome_contigs_recorder(binset, binset_record, binset_genome_size,
+                            coverage_matrix):
+    """
+    Record contig membership and genome sizes for a binset (CheckM).
+    """
     binset_record[str(binset)]={}
     binset_genome_size[str(binset)]={}
     bins_coverage, bin_num_contigs, bin_total_length, bin_GC, bin_GC_ratio, binset_coverage, all_bins={}, {}, {}, {}, {}, {}, {}
@@ -556,7 +582,12 @@ def genome_contigs_recorder(binset, binset_record, binset_genome_size, coverage_
     
     return binset_record, binset_genome_size, binset_coverage_avg, bin_GC_ratio, all_bins
 
-def coverage_GC_comparitor(binset_coverage_avg1, binset_coverage_avg2, binset_GC_ratio1, binset_GC_ratio2, iteration_num):
+def coverage_GC_comparitor(binset_coverage_avg1, binset_coverage_avg2,
+                           binset_GC_ratio1, binset_GC_ratio2,
+                           iteration_num):
+    """
+    Compare coverage and GC content between two binsets (CheckM).
+    """
     print('Comparing coverages')
     bins_score, bins_score_total, bins_score_delta, bin_gc={}, {}, {}, {}
     for item in binset_coverage_avg1.keys():
@@ -683,7 +714,13 @@ def coverage_GC_comparitor(binset_coverage_avg1, binset_coverage_avg2, binset_GC
     print('-----------------------')
     return bins_coverage_score, bin_gc, binset_coverage_gc
 
-def seq_comparitor(blast_output, binset1, binset2, seq_len1, seq_len2, binset_record1, binset_record2, binset_genome_size1, binset_genome_size2, bins_coverage_score):
+def seq_comparitor(blast_output, binset1, binset2, seq_len1, seq_len2,
+                   binset_record1, binset_record2,
+                   binset_genome_size1, binset_genome_size2,
+                   bins_coverage_score):
+    """
+    Compare bin pairs based on BLASTn contig overlaps and coverage (CheckM).
+    """
     print('Comparing blast output of '+binset1+' and '+binset2)
     print('-----------------------')
     contig_contig_score={}
@@ -851,6 +888,9 @@ def seq_comparitor(blast_output, binset1, binset2, seq_len1, seq_len2, binset_re
     return contig_contig_score, contig_bin_genome, bin_seq_coverage_filtrated
 
 def checkm_connections(binset):
+    """
+    Read CheckM connection statistics for a given binset (CheckM branch).
+    """
     print('Reading checkm output of '+binset)
     pwd=os.getcwd()
     binset_checkm_connection={}
@@ -881,7 +921,13 @@ def checkm_connections(binset):
     print('-----------------------------------------')
     return binset_checkm_connection
 
-def bin_comparitor(bin_seq_coverage_filtrated, binset_checkm_connection_1, binset_checkm_connection_2, num):
+def bin_comparitor(bin_seq_coverage_filtrated,
+                   binset_checkm_connection_1,
+                   binset_checkm_connection_2,
+                   num):
+    """
+    Compare bins from two binsets using coverage and CheckM connections.
+    """
     print('Comparing bins')
     selected_bins, eliminated_bins={}, {}
     marker_score={'root':0, 'k':1, 'p':1.5, 'c':2.3, 'o':3.4, 'f':5.1, 'g':7.6, 's':11.4}
@@ -979,7 +1025,17 @@ def bin_comparitor(bin_seq_coverage_filtrated, binset_checkm_connection_1, binse
     print('----------------')
     return selected_bins, eliminated_bins
 
-def new_selected_bins_generator(selected_bins, eliminated_bins, all_bins_1, all_bins_2, binset_checkm_connection_1, binset_checkm_connection_2, iteration_num, binset1, binset2, Contigs_assembly1, Contigs_assembly2, coverage_matrix1, coverage_matrix2, binset_coverage_avg1, binset_coverage_avg2):
+def new_selected_bins_generator(selected_bins, eliminated_bins,
+                                all_bins_1, all_bins_2,
+                                binset_checkm_connection_1,
+                                binset_checkm_connection_2,
+                                iteration_num, binset1, binset2,
+                                Contigs_assembly1, Contigs_assembly2,
+                                coverage_matrix1, coverage_matrix2,
+                                binset_coverage_avg1, binset_coverage_avg2):
+    """
+    Generate updated selected bins after each comparison iteration (CheckM).
+    """
     pwd=os.getcwd()
     extract_bins_1, extract_bins_2, coverage_maxtrix={}, {}, {}
 
@@ -1145,6 +1201,9 @@ def new_selected_bins_generator(selected_bins, eliminated_bins, all_bins_1, all_
     return extract_bins_1, extract_bins_2, 'Contigs_iteration_'+str(iteration_num)+'.fa', 'Iteration_'+str(iteration_num)+'_genomes', new_coverage_name, bin_avg_cov_new
 
 def final_iteration_mapping(contigs, datasets, num_threads, pwd):
+    """
+    Perform final read mapping for selected contigs/bins (CheckM).
+    """
     print('Building '+str(contigs)+' Bowtie2 index')
     os.system('bowtie2-build '+str(contigs)+' '+str(contigs))
     for i in range(1, len(datasets)+1):
@@ -1239,6 +1298,9 @@ def final_iteration_mapping(contigs, datasets, num_threads, pwd):
     return bin_core_avg
 
 def mapping(bin, datasets, num_threads, pwd):
+    """
+    Map short reads to a given bin using bowtie2 (CheckM).
+    """
     print('Building '+str(bin)+' Bowtie2 index')
     os.system('bowtie2-build '+str(bin)+' '+str(bin))
     for i in range(1, len(datasets)+1):
@@ -1316,6 +1378,9 @@ def mapping(bin, datasets, num_threads, pwd):
     return bin_core_avg
 
 def parse_checkm(file):
+    """
+    Parse a CheckM quality report file into a dictionary.
+    """
     bin_checkm={}
     for line in open(file,'r'):
         bin_id=str(line).strip().split('\t')[0]
@@ -1394,7 +1459,12 @@ def parse_checkm(file):
         bin_checkm[bin_id_f4]['Contamination']=float(str(line).strip().split('Contamination\': ')[1].split('}')[0].split(',')[0].strip())
     return bin_checkm
 
-def initial_drep_final_comparitor(output_folder_name, final_iteration_folder, Coverage_maxtrix_list, datasets, num_threads, pwd, step):
+def initial_drep_final_comparitor(output_folder_name, final_iteration_folder,
+                                  Coverage_maxtrix_list, datasets,
+                                  num_threads, pwd, step):
+    """
+    Compare bins during initial dereplication (after S4) for CheckM branch.
+    """
     # output_folder_name='BestBinset'
     try:
         os.system('mkdir '+output_folder_name)
@@ -1861,7 +1931,12 @@ def initial_drep_final_comparitor(output_folder_name, final_iteration_folder, Co
     os.system('mv bins_depth_comparison.txt Contigs_sharing_bins.txt Contigs_iteration_* Coverage_matrix_for_binning_iteration_* Selected_bins_* Removed_bins_* Extract_bins_* Bins_similar_* Contigs_scoring_* Raw_bins_* Filtrated_* *_vs_* *_gc.txt *_bins_coverage.txt Test_Raw_Bins_Comparison_* Total_bins_similar_coverage_* Core_contigs_* core_contigs_* Single_mapping_depth.txt Abnor_normalization_record.txt Potential_similar_* Unfiltrated_potential_similar_* Potential_replicate_but_cov_inconsistence_bins.txt '+str(output_folder_name)+'_comparison_files')
     # os.system('rm -rf CC_* Merge_binset*')
 
-def final_binset_comparitor(final_iteration_folder, Coverage_maxtrix_list, datasets, num_threads, pwd, step):
+def final_binset_comparitor(final_iteration_folder,
+                            Coverage_maxtrix_list, datasets,
+                            num_threads, pwd, step):
+    """
+    Final binset comparison after reassembly and OLC steps (CheckM branch).
+    """
     output_folder_name=final_iteration_folder
 
     present_bins, present_bins_org, bin_checkm, bin_status = {}, {}, {}, {}
@@ -2317,6 +2392,9 @@ def final_binset_comparitor(final_iteration_folder, Coverage_maxtrix_list, datas
     os.system('rm -rf CC_* Merge_binset*')
 
 def record_bin_coverage(best_binset_from_multi_assemblies, coverage_file):
+    """
+    Record bin coverage statistics to support downstream comparisons (CheckM).
+    """
     pwd=os.getcwd()
 
     #### In some cases, the program accidently stops, causing the bins num in checkm file low that the bins on the folder
@@ -2411,7 +2489,11 @@ def record_bin_coverage(best_binset_from_multi_assemblies, coverage_file):
     os.chdir(pwd)
     return bin_contig_cov, bin_contigs, contig_cov
 
-def binset_comparitor(binset1, binset2, coverage1, coverage2, binset_coverage_total, pwd, num_threads):
+def binset_comparitor(binset1, binset2, coverage1, coverage2,
+                      binset_coverage_total, pwd, num_threads):
+    """
+    Compare two binsets and update selected bins and coverage summaries (CheckM).
+    """
     bins_binset1, bins_binset2 = {}, {}
     for root, dirs, files in os.walk(pwd+'/'+binset1):
         os.chdir(pwd+'/'+binset1)
@@ -2645,7 +2727,12 @@ def binset_comparitor(binset1, binset2, coverage1, coverage2, binset_coverage_to
     f2.close()
     return potential_simialr_bin
 
-def multiple_assembly_comparitor_main(Contig_list_o, BestBinSet_list_o, Coverage_list_o, datasets, step, num_threads):
+def multiple_assembly_comparitor_main(Contig_list_o, BestBinSet_list_o,
+                                      Coverage_list_o, datasets,
+                                      step, num_threads):
+    """
+    Entry point for S4 (CheckM branch): multi-assembly bin comparison.
+    """
     pwd=os.getcwd()
     try:
         flog=open('Basalt_log.txt','a')

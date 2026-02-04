@@ -23,7 +23,30 @@ import numpy as np
 import pandas as pd
 from multiprocessing import Pool
 
+
 def self_connecting(bins, bin_folder, bin_contigs_length, pwd, num_threads):
+    """
+    Detect self-aligning contigs within a bin and build connectivity graph.
+
+    Parameters
+    ----------
+    bins : str
+        Path to the combined FASTA file for a set of bins.
+    bin_folder : str
+        Folder containing the original bin FASTA files.
+    bin_contigs_length : dict
+        Mapping ``bin_id -> dict(contig_id -> length)`` with contig lengths.
+    pwd : str
+        Working directory path.
+    num_threads : int
+        Number of threads reserved for downstream BLAST parsing (currently
+        only BLAST itself uses 1 thread).
+
+    Returns
+    -------
+    dict
+        Connectivity information exploited later during gap filling.
+    """
     os.system('makeblastdb -dbtype nucl -in '+str(bins)+' -logfile makeblastdb_log.txt')
     os.system('blastn -query '+str(bins)+' -db '+str(bins)+' -outfmt 6 -evalue 1e-5 -max_target_seqs 50 -out '+str(bins)+'_selfblast.txt -num_threads 1')
     os.system('rm '+str(bins)+'.nsq '+str(bins)+'.nin '+str(bins)+'.nhr')

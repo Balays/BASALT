@@ -21,7 +21,32 @@ import numpy as np
 import pandas as pd
 from multiprocessing import Pool
 
-def elongate_contig_selector(eliminated_bin, threshold, pwd, eliminated_bin_containing_folder):
+
+def elongate_contig_selector(eliminated_bin, threshold, pwd,
+                             eliminated_bin_containing_folder):
+    """
+    Select contigs within an eliminated bin that are suitable for OLC elongation
+    (CheckM branch).
+
+    Parameters
+    ----------
+    eliminated_bin : str
+        File name of the bin FASTA to be evaluated (within the
+        ``eliminated_bin_containing_folder``).
+    threshold : float
+        Outlier threshold used in the PCA / IQR based filter.
+    pwd : str
+        Working directory path.
+    eliminated_bin_containing_folder : str
+        Folder in which the eliminated bin FASTA and coverage files reside.
+
+    Returns
+    -------
+    list of str
+        List of file names for newly generated candidate bins after
+        removing outlier contigs. The list may be empty if no candidates
+        are produced.
+    """
     selected_bins=[]
     if os.path.exists(pwd+'/'+str(eliminated_bin)):
         print(str(eliminated_bin)+' already presented in '+pwd)
@@ -127,6 +152,35 @@ def elongate_contig_selector(eliminated_bin, threshold, pwd, eliminated_bin_cont
     return selected_bins
 
 def outlier_remover(bin_id, contigs_ids, threshold, item_data, explained_variance_ratio, pwd):
+    """
+    Identify outlier contigs using an IQR-based rule on projected features
+    (CheckM branch).
+
+    Parameters
+    ----------
+    bin_id : str
+        Identifier of the bin being evaluated.
+    contigs_ids : list of str
+        List of contig identifiers corresponding to ``item_data`` entries.
+    threshold : list of float
+        List of multiplicative factors applied to IQR when computing
+        upper/lower bounds (one value per run).
+    item_data : list of float
+        One-dimensional feature vector (e.g. first PCA component values)
+        for each contig in ``contigs_ids``.
+    explained_variance_ratio : numpy.ndarray
+        Explained variance ratios of the PCA transformation used to
+        generate ``item_data``, written into the summary files.
+    pwd : str
+        Working directory path where per-bin outlier folders are created.
+
+    Returns
+    -------
+    dict
+        Mapping ``threshold_value -> dict(contig_id -> feature_value)``
+        describing which contigs were flagged as outliers for each
+        threshold.
+    """
     print('Finding outlier from', bin_id)
     four = pd.Series(item_data).describe()
     bin_outlier={}
@@ -162,6 +216,24 @@ def outlier_remover(bin_id, contigs_ids, threshold, item_data, explained_varianc
     return bin_outlier
 
 def PCA_slector(data_array, num_contig):
+    """
+    Project feature matrix to a single principal component (CheckM branch).
+
+    Parameters
+    ----------
+    data_array : numpy.ndarray
+        Two-dimensional array of shape ``(num_contig, num_features)``
+        containing per-contig features (coverage, TNF, etc.).
+    num_contig : int
+        Number of contigs represented in ``data_array``.
+
+    Returns
+    -------
+    list of float
+        Single principal-component score per contig.
+    numpy.ndarray
+        Array of explained variance ratios for the PCA model.
+    """
     pca = PCA(n_components=1)
     pca.fit(data_array)
     explained_variance_ratio=pca.explained_variance_ratio_
@@ -179,6 +251,35 @@ def PCA_slector(data_array, num_contig):
     return newData_list_item, explained_variance_ratio
 
 def record_seq(target_bin, eliminated_bin):
+    """
+    Concatenate sequences from a target bin and an eliminated bin (CheckM branch).
+
+    Parameters
+    ----------
+    target_bin : str
+        File name of the target bin FASTA.
+    eliminated_bin : str
+        File name of the eliminated bin FASTA whose contigs may be
+        recruited or merged.
+
+    Returns
+    -------
+    dict
+        Mapping ``contig_id -> sequence_str`` for the target bin.
+    dict
+        Mapping ``contig_id -> length`` for the target bin.
+    dict
+        Mapping ``contig_id -> sequence`` for the eliminated bin.
+    dict
+        Mapping ``contig_id -> length`` for the eliminated bin.
+    str
+        Name of the merged FASTA file written to the working directory.
+    dict
+        Mapping ``contig_id -> sequence`` for all contigs from both bins.
+    dict
+        Dictionary used to record which merged bin files have been
+        generated; keys are merged file names.
+    """
     merged_bin_recorded={}
     f=open('Merged_'+target_bin+'_'+eliminated_bin,'w')
     merged_bin_recorded['Merged_'+target_bin+'_'+eliminated_bin]=0
@@ -200,6 +301,43 @@ def record_seq(target_bin, eliminated_bin):
     return target_contig_seq, target_contig_len, vs_contig_seq, vs_contig_len, 'Merged_'+target_bin+'_'+eliminated_bin, total_seq, merged_bin_recorded
 
 def blast_1(target_bin, eliminated_bin, target_contig_seq, target_contig_len, vs_contig_seq, vs_contig_len, aligned_len_cutoff, similarity_cutoff, num_threads, blast_name, folder_name):
+    """
+    Run BLAST between target and eliminated bins and group similar contigs
+    (CheckM branch).
+
+    Parameters
+    ----------
+    target_bin : str
+        Path to the FASTA file of the target bin being elongated.
+    eliminated_bin : str
+        Path to the FASTA file of the eliminated bin to search against.
+    target_contig_seq : dict
+        Mapping ``contig_id -> sequence_str`` for target contigs.
+    target_contig_len : dict
+        Mapping ``contig_id -> length`` for target contigs.
+    vs_contig_seq : dict
+        Mapping ``contig_id -> sequence`` for contigs from the eliminated bin.
+    vs_contig_len : dict
+        Mapping ``contig_id -> length`` for contigs from the eliminated bin.
+    aligned_len_cutoff : int
+        Minimum aligned length to consider a BLAST hit valid.
+    similarity_cutoff : float
+        Minimum percentage identity for a BLAST hit to be kept.
+    num_threads : int
+        Number of BLAST threads to use (the implementation currently
+        sets it to 1 internally).
+    blast_name : str
+        Base name for BLAST output files.
+    folder_name : str
+        Folder where filtered BLAST outputs and helper files will be moved.
+
+    Returns
+    -------
+    dict
+        Mapping ``group_id -> list(stripped_alignment_lines)`` describing
+        groups of contigs that are similar enough to be considered in
+        the same OLC elongation group.
+    """
     pwd=os.getcwd()
     os.system('makeblastdb -in '+eliminated_bin+' -dbtype nucl -hash_index -parse_seqids -logfile '+eliminated_bin+'_db.txt')
     # os.system('blastn -query '+target_bin+' -db '+eliminated_bin+' -evalue 1e-20 -num_threads '+str(num_threads)+' -outfmt 6 -out '+str(blast_name))
@@ -883,7 +1021,56 @@ def bin_comparison2(bin_checkm):
         best_bin_checkm3[best_bin_checkm2[bin_id]]=best_bin_checkm[bin_id]
     return best_bin_checkm3
 
-def OLC_elongation_main(target_bin, eliminated_bin, target_bin_checkm, iteration_num, num, aligned_len_cutoff, similarity_cutoff, coverage_extension, num_threads, pwd, eliminated_bin_containing_folder, checkmmode):
+def OLC_elongation_main(target_bin, eliminated_bin, target_bin_checkm,
+                        iteration_num, num, aligned_len_cutoff,
+                        similarity_cutoff, coverage_extension,
+                        num_threads, pwd, eliminated_bin_containing_folder,
+                        checkmmode):
+    """
+    Perform OLC-based elongation of a single target bin using an eliminated bin
+    (CheckM branch).
+
+    Parameters
+    ----------
+    target_bin : str
+        FASTA file of the target bin to be elongated.
+    eliminated_bin : str
+        FASTA file of the eliminated bin providing candidate contigs.
+    target_bin_checkm : dict
+        CheckM quality metrics for the target bin (completeness, contamination,
+        etc.), propagated to newly produced bins.
+    iteration_num : int
+        Current OLC elongation iteration index.
+    num : int
+        Mode flag controlling whether contig-bin selection is performed
+        (0) or an already selected bin is reused (1).
+    aligned_len_cutoff : int
+        Minimum BLAST alignment length to consider for elongation.
+    similarity_cutoff : float
+        Minimum percentage identity for BLAST alignments.
+    coverage_extension : float
+        Minimum coverage extension threshold when evaluating candidate bins.
+    num_threads : int
+        Number of threads for BLAST and other CPU-intensive routines.
+    pwd : str
+        Working directory path.
+    eliminated_bin_containing_folder : str
+        Folder that contains the eliminated bin FASTA and depth files.
+    checkmmode : str
+        String flag indicating which CheckM workflow is being used.
+
+    Returns
+    -------
+    dict
+        Mapping ``bin_name -> dict(checkm_metrics)`` for elongated bins
+        retained after this iteration.
+    dict
+        Mapping ``bin_name -> dict(contig_id -> sequence)`` representing
+        sequences of elongated bins.
+    dict
+        Mapping ``bin_name -> dict(contig_id -> int)`` indicating which
+        contigs come from original bins and which were recruited.
+    """
     # pwd=os.getcwd()
     # try:
     merged_bin_recorded={}
@@ -1312,6 +1499,27 @@ def finding_similar_bins(target_bin_folder, bin_comparison_folder):
     return bestbinset_sim_bin2
 
 def mapping(total_fa, datasets_list, fq, num_threads):
+    """
+    Map short reads to a combined bin reference and prepare bin-specific FASTQ
+    (CheckM branch).
+
+    Parameters
+    ----------
+    total_fa : str
+        Path to the concatenated FASTA file containing all bin sequences.
+    datasets_list : dict
+        Mapping ``sample_id -> [r1_fastq, r2_fastq]`` with paired-end reads.
+    fq : dict
+        Mapping ``bin_id -> dict(read_id -> int)`` used to track mates
+        when writing bin-specific FASTQ files.
+    num_threads : int
+        Number of Bowtie2 threads to use.
+
+    Returns
+    -------
+    None
+        Writes bin-specific FASTQ files to the current working directory.
+    """
     os.system('bowtie2-build '+str(total_fa)+' '+str(total_fa))
     n = 0
     for item in datasets_list.keys():
@@ -1320,6 +1528,26 @@ def mapping(total_fa, datasets_list, fq, num_threads):
         parse_sam(str(item)+'.sam', fq, n)
 
 def reassembly_paired_bins(target_bin_folder, reassembly_binset_folder, orig_binset):
+    """
+    Group reassembled bins that originate from the same original bin
+    (CheckM branch).
+
+    Parameters
+    ----------
+    target_bin_folder : str
+        Folder containing original and reassembled bin FASTA files.
+    reassembly_binset_folder : str
+        Folder holding reassembled bin sequences.
+    orig_binset : str
+        Folder name of the original binset used to derive reassemblies.
+
+    Returns
+    -------
+    dict
+        Mapping ``bin_filename -> list(similar_bin_filenames)`` indicating
+        which reassembled bins should be compared together in downstream
+        OLC steps.
+    """
     pwd=os.getcwd()
     print('Forming similar bins file')
     binset, bestbinset_sim_bin, total_seq, m = {}, {}, {}, 0
@@ -1436,7 +1664,56 @@ def reassembly_paired_bins(target_bin_folder, reassembly_binset_folder, orig_bin
 
     return bestbinset_sim_bin
 
-def mul_threads(item, bestbinset_sim_bin, bestbinset_checkm, step, pwd, aligned_len_cutoff, similarity_cutoff, orig_binset, target_bin_folder, bin_comparison_folder, coverage_extension, num_threads, checkmmode):
+def mul_threads(item, bestbinset_sim_bin, bestbinset_checkm, step, pwd,
+                aligned_len_cutoff, similarity_cutoff, orig_binset,
+                target_bin_folder, bin_comparison_folder, coverage_extension,
+                num_threads, checkmmode):
+    """
+    Worker function for parallel OLC processing of a single bin (CheckM branch).
+
+    Parameters
+    ----------
+    item : str
+        File name of the current bin to be processed.
+    bestbinset_sim_bin : dict
+        Mapping ``bin_filename -> list(similar_bin_filenames)`` generated
+        by :func:`reassembly_paired_bins`.
+    bestbinset_checkm : dict
+        Mapping ``bin_id -> dict(checkm_metrics)`` with quality statistics
+        for each bin.
+    step : {'assemblies_OLC', 'OLC_after_reassembly'}
+        Pipeline step indicating whether OLC is being run on assemblies
+        or on reassembled bins.
+    pwd : str
+        Working directory path.
+    aligned_len_cutoff : int
+        Minimum alignment length for BLAST-based comparisons.
+    similarity_cutoff : float
+        Minimum percentage identity for BLAST-based comparisons.
+    orig_binset : str
+        Folder name of the original binset.
+    target_bin_folder : str
+        Folder containing the bins being processed.
+    bin_comparison_folder : str
+        Folder containing bin comparison files.
+    coverage_extension : float
+        Minimum coverage extension threshold when evaluating candidate bins.
+    num_threads : int
+        Number of worker threads for BLAST and other operations.
+    checkmmode : str
+        String flag indicating which CheckM workflow is being used.
+
+    Returns
+    -------
+    dict
+        Mapping ``selected_bin_filename -> selected_bin_id`` for the best
+        bin chosen for this item.
+    dict
+        Mapping ``selected_bin_id -> dict(checkm_metrics)`` with updated
+        CheckM statistics.
+    dict
+        Mapping ``bin_filename -> 0`` for bins that should be removed.
+    """
     total_selected_bin, total_selected_bin_checkm, remove_bin={}, {}, {}
     checkm_name_list=item.split('.')
     checkm_name_list.remove(checkm_name_list[-1])
@@ -1490,6 +1767,20 @@ def mul_threads(item, bestbinset_sim_bin, bestbinset_checkm, step, pwd, aligned_
     return total_selected_bin, total_selected_bin_checkm, remove_bin
 
 def cleanup(max_num):
+    """
+    Remove temporary OLC files generated in the CheckM branch.
+
+    Parameters
+    ----------
+    max_num : int
+        Maximum numeric suffix used when generating temporary folders and
+        files; used to decide which items to attempt to remove.
+
+    Returns
+    -------
+    None
+        Performs in-place filesystem cleanup.
+    """
     os.system('rm *_db.txt')
     os.system('rm *.nsq')
     os.system('rm *.nin')
@@ -1528,7 +1819,42 @@ def cleanup(max_num):
     os.system('rm -rf *_outlier')
     os.system('rm -rf Merged_seqs_*')
 
-def OLC_main_checkm(target_bin_folder, step, bin_comparison_folder, aligned_len_cutoff, similarity_cutoff, coverage_extension, num_threads, ram, orig_binset):
+def OLC_main_checkm(target_bin_folder, step, bin_comparison_folder,
+                    aligned_len_cutoff, similarity_cutoff, coverage_extension,
+                    num_threads, ram, orig_binset):
+    """
+    High-level driver for the S8 OLC reassembly step (CheckM branch).
+
+    Parameters
+    ----------
+    target_bin_folder : str
+        Folder containing the bins to be processed by OLC.
+    step : {'assemblies_OLC', 'OLC_after_reassembly'}
+        Pipeline step indicating whether OLC is applied to assemblies
+        or to previously reassembled bins.
+    bin_comparison_folder : str
+        Folder containing CheckM-derived bin comparison results.
+    aligned_len_cutoff : int
+        Minimum alignment length for sequence comparisons.
+    similarity_cutoff : float
+        Minimum percentage identity for sequence comparisons.
+    coverage_extension : float
+        Minimum coverage extension threshold used when assessing bin
+        improvements after OLC.
+    num_threads : int
+        Number of parallel worker processes to spawn.
+    ram : int
+        Maximum RAM (in GB) available to downstream tools.
+    orig_binset : str
+        Folder name of the original binset used to derive reassemblies.
+
+    Returns
+    -------
+    None
+        Writes updated bins, CheckM reports, and comparison summaries
+        to disk; the function coordinates per-bin workers and does not
+        return Python objects.
+    """
     pwd=os.getcwd()
     ferror=open('OLC_merged_error_blast_results.txt','w')
     ferror.close()

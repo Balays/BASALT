@@ -19,6 +19,17 @@ import shutil
 def fq2fa_conversion(filename):
     """
     Convert a FASTQ file into a FASTA file using Biopython.
+
+    Parameters
+    ----------
+    filename : str
+        Path to the input FASTQ file ('.fq' or '.fastq').
+
+    Returns
+    -------
+    str
+        Basename of the generated FASTA file (without path),
+        with extension '.fasta'.
     """
     start=time.time()
     wrerr = sys.stderr.write
@@ -44,6 +55,18 @@ def fq2fa_conversion(filename):
 def ModifyEnd_fa(filename, n):
     """
     Add PE tracking suffix to FASTA record identifiers for later mapping.
+
+    Parameters
+    ----------
+    filename : str
+        Path to the FASTA file whose record IDs will be modified.
+    n : int
+        Index of the read mate (1 or 2) used to encode PE information.
+
+    Returns
+    -------
+    str
+        Name of the newly generated FASTA file with modified identifiers.
     """
     print('---')
     print('Adding end for PE-tracking of '+str(filename))
@@ -64,6 +87,18 @@ def ModifyEnd_fa(filename, n):
 def ModifyEnd(filename, n):
     """
     Add PE tracking suffix to FASTQ record identifiers for later mapping.
+
+    Parameters
+    ----------
+    filename : str
+        Path to the FASTQ file whose record IDs will be modified.
+    n : int
+        Index of the read mate (1 or 2) used to encode PE information.
+
+    Returns
+    -------
+    str
+        Name of the newly generated FASTQ file with modified identifiers.
     """
     print('---')
     print('Adding end for PE-tracking of '+str(filename))
@@ -90,6 +125,18 @@ def ModifyEnd(filename, n):
 def PE_tracker(sam_file, output_name):
     """
     Parse a SAM file to infer paired-end contig connections.
+
+    Parameters
+    ----------
+    sam_file : str
+        Path to the SAM file containing PE mappings.
+    output_name : str
+        Output filename for the aggregated PE connections.
+
+    Returns
+    -------
+    None
+        Results are written to ``output_name``.
     """
     contig_pe, contig_pe_mock, n={}, {}, 0
     for line in open(sam_file,'r'):
@@ -139,6 +186,17 @@ def PE_tracker(sam_file, output_name):
 def cal_connections(connections):
     """
     Aggregate PE connection counts from multiple connection files.
+
+    Parameters
+    ----------
+    connections : list of str
+        List of filenames, each containing PE connection records
+        produced by ``PE_tracker``.
+
+    Returns
+    -------
+    dict
+        Mapping 'id1\\tinter\\tid2' -> aggregated connection count.
     """
     PEC={}
     for item in connections:
@@ -159,6 +217,19 @@ def cal_connections(connections):
     return PEC
 
 def parse_lr_sam_hifi_connecting_contigs(sam_file):
+    """
+    Parse HiFi long-read SAM to find contigs jointly covered by the same read.
+
+    Parameters
+    ----------
+    sam_file : str
+        Path to the SAM file generated from HiFi long-read mapping.
+
+    Returns
+    -------
+    None
+        Appends results to ``Long_reads_connecting_contigs.txt``.
+    """
     print('Processing '+sam_file+' for finding connecting contigs')
     lr_contig, lr_contig2 = {}, {}
     m, m1 = 0, 0
@@ -203,6 +274,19 @@ def parse_lr_sam_hifi_connecting_contigs(sam_file):
     f.close()
 
 def parse_lr_sam_connecting_contigs(sam_file):
+    """
+    Parse generic long-read SAM to find contigs jointly covered by the same read.
+
+    Parameters
+    ----------
+    sam_file : str
+        Path to the SAM file generated from long-read mapping.
+
+    Returns
+    -------
+    None
+        Appends results to ``Long_reads_connecting_contigs.txt``.
+    """
     print('Processing '+sam_file+' for finding connecting contigs')
     lr_contig, lr_contig2 = {}, {}
     m, m1 = 0, 0
@@ -246,6 +330,29 @@ def parse_lr_sam_connecting_contigs(sam_file):
     f.close()
 
 def mapping_lr_o(assembly, group, datasets, num_threads, pwd, data_type):
+    """
+    Map long-read datasets (ONT/PB) to the assembly and generate BAM files.
+
+    Parameters
+    ----------
+    assembly : str
+        Assembly filename (without group prefix).
+    group : str
+        Group identifier used to prefix output files.
+    datasets : list of str
+        List of long-read FASTQ/FASTA files.
+    num_threads : int
+        Number of threads to use for minimap2 and samtools.
+    pwd : str
+        Working directory.
+    data_type : {'ont', 'pb'}
+        Long-read platform, used to select minimap2 preset.
+
+    Returns
+    -------
+    str
+        Space-separated string of sorted BAM file names.
+    """
     print('Mapping '+str(datasets)+' to contigs/scaffolds')
     try:
         f_coverage_matrix=open('Coverage_list_'+str(group)+'_'+assembly+'.txt', 'a')
@@ -288,6 +395,27 @@ def mapping_lr_o(assembly, group, datasets, num_threads, pwd, data_type):
     return bam_sorted
 
 def mapping_hifi_split(assembly, group, long_read_split_fa, num_threads, pwd):
+    """
+    Map split HiFi read pairs to the assembly using bowtie2.
+
+    Parameters
+    ----------
+    assembly : str
+        Assembly filename (without group prefix).
+    group : str
+        Group identifier used to prefix output files.
+    long_read_split_fa : dict
+        Mapping index -> [r1_fasta, r2_fasta] representing split HiFi pairs.
+    num_threads : int
+        Number of threads for bowtie2 and samtools.
+    pwd : str
+        Working directory.
+
+    Returns
+    -------
+    str
+        Space-separated string of sorted BAM file names.
+    """
     print('Mapping datasets to contigs/scaffolds')
     # f_coverage_matrix=open('Coverage_list_'+assembly+'.txt', 'w')
     try:
@@ -329,6 +457,27 @@ def mapping_hifi_split(assembly, group, long_read_split_fa, num_threads, pwd):
     return bam_sorted
 
 def mapping_hifi_minimap(assembly, group, long_read_split_fa, num_threads, pwd):
+    """
+    Map HiFi reads to the assembly using minimap2 (map-hifi preset).
+
+    Parameters
+    ----------
+    assembly : str
+        Assembly filename (without group prefix).
+    group : str
+        Group identifier used to prefix output files.
+    long_read_split_fa : list of str
+        List of HiFi read files to be mapped.
+    num_threads : int
+        Number of threads for minimap2 and samtools.
+    pwd : str
+        Working directory.
+
+    Returns
+    -------
+    str
+        Space-separated string of sorted BAM file names.
+    """
     print('Mapping datasets to contigs/scaffolds')
     # f_coverage_matrix=open('Coverage_list_'+assembly+'.txt', 'w')
     try:
@@ -411,6 +560,28 @@ def mapping_hifi_minimap(assembly, group, long_read_split_fa, num_threads, pwd):
     return bam_sorted
 
 def mapping(assembly, group, datasets, num_threads, pwd):
+    """
+    Map paired-end short reads to the assembly using bowtie2.
+
+    Parameters
+    ----------
+    assembly : str
+        Assembly filename (without group prefix).
+    group : str
+        Group identifier used to prefix output files.
+    datasets : dict
+        Mapping dataset_id -> [R1, R2] FASTQ filenames.
+    num_threads : int
+        Number of threads for bowtie2 and samtools.
+    pwd : str
+        Working directory.
+
+    Returns
+    -------
+    tuple
+        (coverage_list_file, sorted_bam_string)
+        where ``sorted_bam_string`` is a space-separated list of BAM files.
+    """
     n=0
     logfile=open('Mapping_log_'+str(group)+'_'+assembly+'.txt', 'w')
 
@@ -457,6 +628,21 @@ def mapping(assembly, group, datasets, num_threads, pwd):
     return bam_sorted
 
 def bin_filtration(folder_name, pwd):
+    """
+    Filter bins shorter than specified thresholds from a bin folder.
+
+    Parameters
+    ----------
+    folder_name : str
+        Name of the bin folder containing FASTA bin files.
+    pwd : str
+        Working directory.
+
+    Returns
+    -------
+    None
+        Operates in-place on files in ``folder_name``.
+    """
     os.chdir(pwd+'/'+str(folder_name))
     for root,dirs,files in os.walk(pwd+'/'+str(folder_name)):
         for file in files:
@@ -474,6 +660,27 @@ def bin_filtration(folder_name, pwd):
     os.chdir(pwd)
 
 def metabat(assembly_file, pwd, depth_file, threshold, num_threads):
+    """
+    Run MetaBAT2 binning on an assembly with a given depth file.
+
+    Parameters
+    ----------
+    assembly_file : str
+        Assembly FASTA file.
+    pwd : str
+        Working directory.
+    depth_file : str
+        Depth file in MetaBAT2-compatible format.
+    threshold : list of float
+        List of minCV thresholds to use.
+    num_threads : int
+        Number of threads for MetaBAT2.
+
+    Returns
+    -------
+    list of str
+        List of output bin folder names produced by MetaBAT2.
+    """
     metabat_genome=str(assembly_file)+'_'+str(threshold)+'_metabat_genomes'
     # print(assembly_file)
     os.chdir(pwd+'/'+str(metabat_genome))
@@ -503,6 +710,29 @@ def metabat(assembly_file, pwd, depth_file, threshold, num_threads):
     #     p_bin_num+=1
 
 def maxbin2(assembly_file, pwd, depth_file, threshold, Coverage_list_file, num_threads):
+    """
+    Run MaxBin2 binning on an assembly with a given depth file.
+
+    Parameters
+    ----------
+    assembly_file : str
+        Assembly FASTA file.
+    pwd : str
+        Working directory.
+    depth_file : str
+        Depth file in MaxBin2-compatible format.
+    threshold : list of float
+        List of min_prob thresholds to use.
+    Coverage_list_file : str
+        Output file listing coverage matrix files.
+    num_threads : int
+        Number of threads for MaxBin2.
+
+    Returns
+    -------
+    list of str
+        List of output bin folder names produced by MaxBin2.
+    """
     maxbin2_genome=str(assembly_file)+'_'+str(threshold)+'_maxbin2_genomes'
     # maxbin2_checkm=str(assembly_file)+'_'+str(threshold)+'_maxbin2_checkm'
     print('Starting maxbin2 autobinner in'+str(threshold))
@@ -517,6 +747,21 @@ def maxbin2(assembly_file, pwd, depth_file, threshold, Coverage_list_file, num_t
     ###os.system('perl '+str(pwd)+'/home/emma/MaxBin-2.2.7/run_MaxBin.pl -abund_list '+Coverage_list_file+' -thread '+str(num_threads)+' -contig '+str(assembly_file)+' -out '+str(maxbin2_genome)+' -prob_threshold '+str(threshold))
 
 def concoct_mod_file(assembly_file, depth_file):
+    """
+    Prepare CONCOCT input files (coverage and assembly) from given depth file.
+
+    Parameters
+    ----------
+    assembly_file : str
+        Assembly FASTA file.
+    depth_file : str
+        Depth file used to derive coverage matrix for CONCOCT.
+
+    Returns
+    -------
+    tuple
+        (concoct_assembly_path, concoct_depth_path)
+    """
     concoct_assembly=open('Concoct_'+assembly_file,'w')
     record_ids={}
     for record in SeqIO.parse(assembly_file, 'fasta'):
@@ -559,6 +804,27 @@ def concoct_mod_file(assembly_file, depth_file):
     return str('Concoct_'+assembly_file), str('Concoct_'+depth_file)
     
 def concoct(assembly_file, pwd, depth_file, threshold, num_threads):
+    """
+    Run CONCOCT binning on an assembly.
+
+    Parameters
+    ----------
+    assembly_file : str
+        Assembly FASTA file.
+    pwd : str
+        Working directory.
+    depth_file : str
+        Depth file used to derive coverage matrix.
+    threshold : list
+        Placeholder list of thresholds (kept for API compatibility).
+    num_threads : int
+        Number of threads for CONCOCT.
+
+    Returns
+    -------
+    list of str
+        List of output bin folder names produced by CONCOCT.
+    """
     org_assembly=str(assembly_file).split('Concoct_')[1]
     concoct_genome=str(org_assembly)+'_'+str(threshold)+'_concoct_genomes'
     concoct_checkm=str(org_assembly)+'_'+str(threshold)+'_concoct_checkm'
@@ -617,6 +883,25 @@ def concoct(assembly_file, pwd, depth_file, threshold, num_threads):
 
 
 def lorbin(assembly_file, pwd, bam_sorted, num_threads):
+    """
+    Run LorBin binning given a sorted BAM file list.
+
+    Parameters
+    ----------
+    assembly_file : str
+        Assembly FASTA file.
+    pwd : str
+        Working directory.
+    bam_sorted : str
+        Space-separated sorted BAM files used for coverage.
+    num_threads : int
+        Number of threads for LorBin.
+
+    Returns
+    -------
+    str
+        Name of the LorBin output bin folder.
+    """
     """
     LorBin autobinner：
       - assembly_file: 在 autobinners 里传入的组装文件名，比如 '1_assembly.fasta'
@@ -678,6 +963,26 @@ def lorbin(assembly_file, pwd, bam_sorted, num_threads):
 
 
 def checkm_mul(num_threads, binset, binset_checkm_folder, checkm_done_f):
+    """
+    Run CheckM lineage workflow for a given binset if not already done.
+
+    Parameters
+    ----------
+    num_threads : int
+        Number of threads for CheckM.
+    binset : str
+        Path to the binset folder.
+    binset_checkm_folder : str
+        Output folder for CheckM results.
+    checkm_done_f : dict
+        Dictionary recording binsets that have already been processed.
+
+    Returns
+    -------
+    None
+        Writes CheckM outputs to ``binset_checkm_folder`` and updates
+        checkpoint/log files.
+    """
     if binset_checkm_folder not in checkm_done_f.keys():
         print('CheckM processing folder: '+str(binset))
         if 'concoct' in str(binset) or 'maxbin' in str(binset):
@@ -699,6 +1004,41 @@ def checkm_mul(num_threads, binset, binset_checkm_folder, checkm_done_f):
         print('Checkm of '+str(binset_checkm_folder)+' already been done in last run.')
 
 def autobinners(softwares, assembly_file, depth_file, depth_file_list, Coverage_list_file, sensitive, binning_ds, checkm_done_f, QC, num_threads, ram, bam_sorted):
+    """
+    Run one or more autobinners (MetaBAT2, MaxBin2, CONCOCT, LorBin).
+
+    Parameters
+    ----------
+    softwares : str
+        Either 'all' or a specific binner selection (currently 'all' used).
+    assembly_file : str
+        Assembly FASTA file.
+    depth_file : str
+        Depth file for the assembly.
+    depth_file_list : list
+        List of depth files (kept for compatibility).
+    Coverage_list_file : str
+        Path to coverage list file to be updated.
+    sensitive : {'quick', 'sensitive', 'more-sensitive'}
+        Sensitivity level controlling threshold sets.
+    binning_ds : dict
+        Dictionary tracking which binsets have already been generated.
+    checkm_done_f : dict
+        Dictionary tracking which binsets have already run CheckM.
+    QC : {'checkm', 'checkm2'}
+        Quality control backend selection.
+    num_threads : int
+        Number of threads to use.
+    ram : int
+        Available RAM in gigabytes.
+    bam_sorted : str
+        Space-separated list of sorted BAM files for LorBin (optional).
+
+    Returns
+    -------
+    dict
+        Mapping from binset folder name to corresponding CheckM output folder.
+    """
     pwd=os.getcwd()
     os.chdir(pwd)
 
@@ -1019,6 +1359,25 @@ def autobinners(softwares, assembly_file, depth_file, depth_file_list, Coverage_
     return genome_folders
 
 def split_reads(reads, read_rename1, read_rename2, insert_size):
+    """
+    Split interleaved paired-end reads into two separate files.
+
+    Parameters
+    ----------
+    reads : str
+        Input FASTQ file with interleaved pairs.
+    read_rename1 : str
+        Output filename for mate 1 reads.
+    read_rename2 : str
+        Output filename for mate 2 reads.
+    insert_size : int
+        Estimated insert size (kept for compatibility, not used here).
+
+    Returns
+    -------
+    None
+        Writes two FASTQ files with split read pairs.
+    """
     print('Splitting '+str(reads))
     f=open(read_rename1,'w')
     f2=open(read_rename2,'w')
@@ -1076,6 +1435,39 @@ def split_reads(reads, read_rename1, read_rename2, insert_size):
     print('Split '+str(reads)+' done!')
 
 def autobinner_main(assembly_list, datasets, lr, hifi_list, insert_size, num_threads, ram, sensitive, QC, pwd):
+    """
+    Top-level entry point for S1 autobinning.
+
+    Parameters
+    ----------
+    assembly_list : list of str
+        List of assembly FASTA filenames.
+    datasets : dict
+        Mapping dataset_id -> [R1, R2] short-read FASTQ pairs.
+    lr : list of str
+        Long-read datasets (ONT/PB).
+    hifi_list : list of str
+        HiFi read datasets.
+    insert_size : int
+        Estimated insert size for PE reads.
+    num_threads : int
+        Number of CPU threads to use.
+    ram : int
+        Available RAM in gigabytes.
+    sensitive : {'quick', 'sensitive', 'more-sensitive'}
+        Autobinning sensitivity level.
+    QC : {'checkm', 'checkm2'}
+        Quality control backend to use.
+    pwd : str
+        Working directory.
+
+    Returns
+    -------
+    tuple
+        (bins_folders_dic, connections_total_dict, depth_total, assembly_MoDict)
+        where each component summarises bin folders, PE connections,
+        depth files and modified assembly names.
+    """
     bins_folders, datasets_fq, connections_total_dict, depth_total, assembly_MoDict={}, {}, {}, {}, {}
 
     try:

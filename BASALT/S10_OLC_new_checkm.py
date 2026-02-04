@@ -21,7 +21,32 @@ import numpy as np
 import pandas as pd
 from multiprocessing import Pool
 
-def elongate_contig_selector(eliminated_bin, threshold, pwd, eliminated_bin_containing_folder):
+
+def elongate_contig_selector(eliminated_bin, threshold, pwd,
+                             eliminated_bin_containing_folder):
+    """
+    Select contigs within an eliminated bin that are suitable for OLC elongation
+    in the post-reassembly stage (CheckM branch).
+
+    Parameters
+    ----------
+    eliminated_bin : str
+        File name of the bin FASTA to be evaluated (within the
+        ``eliminated_bin_containing_folder``).
+    threshold : float
+        Outlier threshold used in the PCA / IQR based filter.
+    pwd : str
+        Working directory path.
+    eliminated_bin_containing_folder : str
+        Folder in which the eliminated bin FASTA and coverage files reside.
+
+    Returns
+    -------
+    list of str
+        List of file names for newly generated candidate bins after
+        removing outlier contigs. The list may be empty if no candidates
+        are produced.
+    """
     try:
         vs_contig_seq, num_contig, i = {}, 0, 1
         while i <= 3 and len(vs_contig_seq) == 0:
@@ -161,6 +186,25 @@ def outliner_remover(bin_id, contigs_ids, threshold, item_data, explained_varian
     return bin_outlier
 
 def PCA_slector(data_array, num_contig):
+    """
+    Project feature matrix to a single principal component (post-reassembly,
+    CheckM branch).
+
+    Parameters
+    ----------
+    data_array : numpy.ndarray
+        Two-dimensional array of shape ``(num_contig, num_features)``
+        containing per-contig features (coverage, TNF, etc.).
+    num_contig : int
+        Number of contigs represented in ``data_array``.
+
+    Returns
+    -------
+    list of float
+        Single principal-component score per contig.
+    numpy.ndarray
+        Array of explained variance ratios for the PCA model.
+    """
     pca = PCA(n_components=1)
     pca.fit(data_array)
     explained_variance_ratio=pca.explained_variance_ratio_
@@ -178,6 +222,36 @@ def PCA_slector(data_array, num_contig):
     return newData_list_item, explained_variance_ratio
 
 def record_seq(target_bin, eliminated_bin):
+    """
+    Concatenate sequences from a target bin and an eliminated bin
+    in the post-reassembly OLC step (CheckM branch).
+
+    Parameters
+    ----------
+    target_bin : str
+        File name of the target bin FASTA.
+    eliminated_bin : str
+        File name of the eliminated bin FASTA whose contigs may be
+        recruited or merged.
+
+    Returns
+    -------
+    dict
+        Mapping ``contig_id -> sequence_str`` for the target bin.
+    dict
+        Mapping ``contig_id -> length`` for the target bin.
+    dict
+        Mapping ``contig_id -> sequence`` for the eliminated bin.
+    dict
+        Mapping ``contig_id -> length`` for the eliminated bin.
+    str
+        Name of the merged FASTA file written to the working directory.
+    dict
+        Mapping ``contig_id -> sequence`` for all contigs from both bins.
+    dict
+        Dictionary used to record which merged bin files have been
+        generated; keys are merged file names.
+    """
     merged_bin_recorded={}
     f=open('Merged_'+target_bin+'_'+eliminated_bin,'w')
     merged_bin_recorded['Merged_'+target_bin+'_'+eliminated_bin]=0
@@ -198,7 +272,46 @@ def record_seq(target_bin, eliminated_bin):
 
     return target_contig_seq, target_contig_len, vs_contig_seq, vs_contig_len, 'Merged_'+target_bin+'_'+eliminated_bin, total_seq, merged_bin_recorded
 
-def blast_1(target_bin, eliminated_bin, target_contig_seq, target_contig_len, vs_contig_seq, vs_contig_len, aligned_len_cutoff, similarity_cutoff, num_threads, blast_name, folder_name):
+def blast_1(target_bin, eliminated_bin, target_contig_seq, target_contig_len,
+            vs_contig_seq, vs_contig_len, aligned_len_cutoff, similarity_cutoff,
+            num_threads, blast_name, folder_name):
+    """
+    Run BLAST between target and eliminated bins and group similar contigs
+    in the post-reassembly OLC step (CheckM branch).
+
+    Parameters
+    ----------
+    target_bin : str
+        Path to the FASTA file of the target bin being elongated.
+    eliminated_bin : str
+        Path to the FASTA file of the eliminated bin to search against.
+    target_contig_seq : dict
+        Mapping ``contig_id -> sequence_str`` for target contigs.
+    target_contig_len : dict
+        Mapping ``contig_id -> length`` for target contigs.
+    vs_contig_seq : dict
+        Mapping ``contig_id -> sequence`` for contigs from the eliminated bin.
+    vs_contig_len : dict
+        Mapping ``contig_id -> length`` for contigs from the eliminated bin.
+    aligned_len_cutoff : int
+        Minimum aligned length to consider a BLAST hit valid.
+    similarity_cutoff : float
+        Minimum percentage identity for a BLAST hit to be kept.
+    num_threads : int
+        Number of BLAST threads to use (the implementation currently
+        sets it to 1 internally).
+    blast_name : str
+        Base name for BLAST output files.
+    folder_name : str
+        Folder where filtered BLAST outputs and helper files will be moved.
+
+    Returns
+    -------
+    dict
+        Mapping ``group_id -> list(stripped_alignment_lines)`` describing
+        groups of contigs that are similar enough to be considered in
+        the same OLC elongation group.
+    """
     pwd=os.getcwd()
     os.system('makeblastdb -in '+eliminated_bin+' -dbtype nucl -hash_index -parse_seqids -logfile '+eliminated_bin+'_db.txt')
     # os.system('blastn -query '+target_bin+' -db '+eliminated_bin+' -evalue 1e-20 -num_threads '+str(num_threads)+' -outfmt 6 -out '+str(blast_name))

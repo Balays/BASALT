@@ -18,6 +18,25 @@ from time import ctime,sleep
 
 
 def intervalue(Xmin, Xmax, Y, Z):
+    """
+    Helper function to compute the upper bound of a coverage bin.
+
+    Parameters
+    ----------
+    Xmin : float
+        Lower bound of the range.
+    Xmax : float
+        Upper bound of the range.
+    Y : float
+        Step size within the range.
+    Z : float
+        Observed coverage value.
+
+    Returns
+    -------
+    float
+        Upper bound of the bin in which Z falls.
+    """
     delta=Xmax-Xmin
     tim=int(delta/Y)
     for i in range(1, tim+2):
@@ -27,6 +46,19 @@ def intervalue(Xmin, Xmax, Y, Z):
             return Xmin
 
 def covrange(X):
+    """
+    Map a coverage value to a coarse-grained coverage range code.
+
+    Parameters
+    ----------
+    X : float
+        Coverage value.
+
+    Returns
+    -------
+    str
+        Four-character string representing the coverage range.
+    """
     if float(X)==0:
         return '0000'
     elif float(X) > 0 and  float(X) < 9:
@@ -56,6 +88,19 @@ def covrange(X):
         return '10000'
 
 def dcovrange(X):
+    """
+    Map a coverage value to a denser coverage range code for derivatives.
+
+    Parameters
+    ----------
+    X : float
+        Coverage value.
+
+    Returns
+    -------
+    str
+        Four-character string representing the coverage range for delta coverage.
+    """
     if float(X)==0:
         return '0000'
     elif float(X) > 0 and float(X) < 9:
@@ -81,6 +126,24 @@ def dcovrange(X):
 
     
 def CoverageMatrix(depth_file, assembly_name):
+    """
+    Build a coverage matrix for binning from a depth file (CheckM branch).
+
+    Parameters
+    ----------
+    depth_file : str
+        Path to the depth file produced from read mapping.
+    assembly_name : str
+        Name of the assembly (used in output filenames).
+
+    Returns
+    -------
+    tuple
+        (cov_dict, covgs_header, matrix_filename)
+        where cov_dict maps contig_id -> coverage features,
+        covgs_header is the header string, and matrix_filename
+        is the name of the coverage matrix file.
+    """
     path=os.getcwd()
 
     fout=open('Coverage_matrix_for_binning_'+str(assembly_name)+'.txt', 'w')
@@ -121,7 +184,14 @@ def CoverageMatrix(depth_file, assembly_name):
     fout.close()
     return cov, covgs, 'Coverage_matrix_for_binning_'+str(assembly_name)+'.txt'
 
-def BinAbundance(depth, cov, covgs, output_format, name_of_the_binning_project, path, genome_summary_dict, genome_summary_dict2, gen_sum):
+def BinAbundance(depth, cov, covgs, output_format, name_of_the_binning_project,
+                 path, genome_summary_dict, genome_summary_dict2, gen_sum):
+    """
+    Compute bin-level abundance statistics and write summary files (CheckM branch).
+
+    See the non-CheckM S2 implementation for parameter and return value
+    semantics; this variant writes CheckM-compatible summaries.
+    """
     # os.chdir(path+'_genomes')
     genome_contig, genome_contig2={}, {}
     # try:
@@ -306,7 +376,11 @@ def BinAbundance(depth, cov, covgs, output_format, name_of_the_binning_project, 
     # os.chdir(path)
     return 'prebinned_genomes_output_for_dataframe_'+str(name_of_the_binning_project)+'.txt'
 
-def GenerationOfGenomeGroupList(prebin_dataframe, PE_connection_file, name_of_the_binning_project, pwd, path):
+def GenerationOfGenomeGroupList(prebin_dataframe, PE_connection_file,
+                                name_of_the_binning_project, pwd, path):
+    """
+    Partition bins into genome groups based on PE connections (CheckM branch).
+    """
     print('---------------------------')
     print('Reading PE-connections file')
 
@@ -402,13 +476,26 @@ def GenerationOfGenomeGroupList(prebin_dataframe, PE_connection_file, name_of_th
         xyzt=0
     return genome_total_connection_file
 
-def multi_threads(pwd, depth_file, cov, covs, bin_format, bin_folder, genome_summary_dict, genome_summary_dict2, gen_sum, PE_connections_file):
+def multi_threads(pwd, depth_file, cov, covs, bin_format, bin_folder,
+                  genome_summary_dict, genome_summary_dict2, gen_sum,
+                  PE_connections_file):
+    """
+    Worker function to run BinAbundance and genome grouping for one bin folder.
+    """
     path=pwd+'/'+bin_folder
     a=BinAbundance(depth_file, cov, covs, bin_format, bin_folder, path, genome_summary_dict, genome_summary_dict2, gen_sum)
     GenerationOfGenomeGroupList(a, PE_connections_file, bin_folder, pwd, path)
     # GenerationOfGenomeGroupList(BinAbundance(depth_file, cov, covs, bin_format, bin_folder, path, genome_summary_dict, genome_summary_dict2, gen_sum), PE_connections_file, bin_folder, pwd, path)
 
-def binsabundance_pe_connections(assembly_binning_group, depth_files, PE_connections_files, assembly_names, num_threads):
+def binsabundance_pe_connections(assembly_binning_group, depth_files,
+                                 PE_connections_files, assembly_names,
+                                 num_threads):
+    """
+    Entry point for S2 (CheckM branch): compute bin abundance and PE connections.
+
+    Parameters mirror the non-CheckM implementation but refer to
+    CheckM-specific outputs and file naming.
+    """
     print('-------------------------------')
     print('Processing Step2')
     print(str(assembly_binning_group))

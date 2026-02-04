@@ -19,8 +19,26 @@ from multiprocessing import Pool
 # from Outlier_remover import *
 from glob import glob
 
+
 def coverage_matrix_mpt(coverage_matrix_file, num):
-    contig_cov={}
+    """
+    Parse a BASALT coverage matrix and build a contig-by-sample coverage map.
+
+    Parameters
+    ----------
+    coverage_matrix_file : str
+        Path to the tab-delimited coverage matrix file produced by BASALT.
+    num : int
+        Number of samples encoded in the coverage matrix.
+
+    Returns
+    -------
+    dict
+        Nested mapping ``contig_id -> sample_index -> coverage``.
+    int
+        The number of samples (same as the ``num`` input).
+    """
+    contig_cov = {}
     n=0
     for line in open(str(coverage_matrix_file),'r'):
         n+=1
@@ -31,7 +49,40 @@ def coverage_matrix_mpt(coverage_matrix_file, num):
                 contig_cov[ids][i]=float(str(line).strip().split('\t')[3*i+1])
     return contig_cov, num
 
-def bin_contig_recruite(bin_contig_cov, bin_contigs, bin_contigs_mock, contig_id, contig_cov, num):
+
+def bin_contig_recruite(bin_contig_cov, bin_contigs, bin_contigs_mock,
+                        contig_id, contig_cov, num):
+    """
+    Assign a connecting contig to bins once it is shared by all contigs in a bin.
+
+    The function uses a temporary mock dictionary to ensure a connecting
+    contig is only recorded for a bin when it appears in all of that bin's
+    constituent contigs.
+
+    Parameters
+    ----------
+    bin_contig_cov : dict
+        Mapping ``bin_name -> contig_id -> sample_index -> coverage``; updated
+        in-place when a contig is fully assigned to a bin.
+    bin_contigs : dict
+        Mapping ``bin_name -> dict(contig_id -> sequence)`` for original bins.
+    bin_contigs_mock : dict
+        Temporary mapping used to count how many times a connecting contig
+        appears in each bin.
+    contig_id : str
+        Identifier of the connecting contig being evaluated.
+    contig_cov : dict
+        Global mapping ``contig_id -> sample_index -> coverage``.
+    num : int
+        Number of samples in the coverage matrix.
+
+    Returns
+    -------
+    dict
+        Updated ``bin_contig_cov`` mapping with recruited contigs.
+    int
+        The number of samples (same as ``num``).
+    """
     for bin_name in bin_contigs.keys():
         bin_contigs_mock[bin_name][contig_id]=1
         if len(bin_contigs_mock[bin_name]) == len(bin_contigs[bin_name]):
@@ -42,8 +93,43 @@ def bin_contig_recruite(bin_contig_cov, bin_contigs, bin_contigs_mock, contig_id
             del bin_contigs_mock[bin_name][contig_id]
     return bin_contig_cov, num
 
-def record_bin_coverage(binset, num_threads, assembly_list, coverage_matrix_list, level_num):
-    pwd=os.getcwd()
+
+def record_bin_coverage(binset, num_threads, assembly_list,
+                        coverage_matrix_list, level_num):
+    """
+    Record per-bin contig coverage for all bins in a retrieval level.
+
+    This routine scans all bin FASTA files, collects contig membership,
+    parses one or more coverage matrices in parallel, and writes
+    a combined coverage file and bin-specific coverage structures.
+
+    Parameters
+    ----------
+    binset : str
+        Path to the bin folder (e.g. ``BestBinset_outlier_refined``).
+    num_threads : int
+        Number of worker processes to use when parsing coverage matrices.
+    assembly_list : list of str
+        List of assembly FASTA paths used to recover sequences for all contigs.
+    coverage_matrix_list : list of str
+        Paths to coverage matrix files for the assemblies.
+    level_num : int
+        Retrieval level index used for logging and file naming.
+
+    Returns
+    -------
+    dict
+        Mapping ``bin_name -> contig_id -> sample_index -> coverage``.
+    dict
+        Mapping ``bin_name -> dict(contig_id -> sequence)`` containing
+        sequences for all contigs in the bins and recruited contigs.
+    dict
+        Mapping ``contig_id -> sample_index -> coverage`` for all contigs.
+    dict
+        Mapping ``bin_name -> dict(contig_id -> int)`` indicating whether a
+        contig was originally in the bin (0) or recruited (1).
+    """
+    pwd = os.getcwd()
     bin_contigs, contig_bin_list, bin_contigs_mock, total_bin_contigs, m = {}, {}, {}, {}, 0
     print('Parsing bins in retrieval_'+str(level_num))
     for root, dirs, files in os.walk(pwd+'/'+str(binset)):
@@ -143,7 +229,30 @@ def record_bin_coverage(binset, num_threads, assembly_list, coverage_matrix_list
     return bin_contig_cov, bin_contigs, contig_cov, total_bin_contigs
 
 def cycle_mt(bin_connecting_contigs, bin_connecting_contigs2, connections, bins):
-    m, m_before, m_after=1, 0, 1
+    """
+    Expand bin-connecting contigs using PE connection graph up to 3 hops.
+
+    Parameters
+    ----------
+    bin_connecting_contigs : dict
+        Mapping ``contig_id -> level`` for contigs already associated
+        with a bin. Updated in-place during the expansion.
+    bin_connecting_contigs2 : dict
+        Secondary mapping used to track only newly added connecting contigs.
+    connections : dict
+        Mapping ``contig_id -> dict(neighbor_contig_id -> connection_level)``.
+    bins : str
+        Bin identifier, used only for logging.
+
+    Returns
+    -------
+    dict
+        Updated ``bin_connecting_contigs`` with all discovered contigs.
+    dict
+        Updated ``bin_connecting_contigs2`` containing only contigs that were
+        added during the expansion.
+    """
+    m, m_before, m_after = 1, 0, 1
     print('Parsing', bins)
     while m <= 3: ### Consider connection level less than 2
         # print(bins, 'cycle', m)
@@ -160,8 +269,34 @@ def cycle_mt(bin_connecting_contigs, bin_connecting_contigs2, connections, bins)
             m=6
     return bin_connecting_contigs, bin_connecting_contigs2
 
+
 def Parsing_kmer_file(assemblies_list, binset, bin_extract_contig, num_threads):
-    pwd=os.getcwd()
+    """
+    Extract k-mer profiles for contigs in each bin and for recruited contigs.
+
+    Parameters
+    ----------
+    assemblies_list : list of str
+        List of assembly FASTA file names; corresponding ``.kmer.txt``
+        files are expected to be present for each assembly.
+    binset : str
+        Path to the bin folder whose contigs will be profiled.
+    bin_extract_contig : dict
+        Mapping ``bin_name -> dict(contig_id -> int)`` of contigs selected
+        for retrieval (connecting contigs).
+    num_threads : int
+        Unused here, kept for API compatibility with other parallel routines.
+
+    Returns
+    -------
+    dict
+        Mapping ``bin_name -> dict(contig_id -> kmer_string)`` for contigs
+        belonging to each bin.
+    dict
+        Mapping ``contig_id -> kmer_string`` for all contigs seen in the
+        assembly-level k-mer files.
+    """
+    pwd = os.getcwd()
     bin_contigs, bin_contigs_mock = {}, {}
     os.chdir(pwd+'/'+binset)
     for root, dirs, files in os.walk(pwd+'/'+binset):
@@ -218,8 +353,38 @@ def Parsing_kmer_file(assemblies_list, binset, bin_extract_contig, num_threads):
 
     return contig_bin_kmer, contig_kmer
 
+
 def PE_connecting_contigs(assembly, PE_connections_file, binset, num_threads):
-    pwd=os.getcwd()
+    """
+    Discover contigs connected to bins via paired-end (PE) read links.
+
+    This function parses PE connection tables for a single assembly and
+    assigns connecting contigs to bins based on the contig IDs present in
+    bin FASTA files.
+
+    Parameters
+    ----------
+    assembly : str
+        Name of the assembly whose PE connection file is being parsed.
+    PE_connections_file : str
+        Path to the PE connection table produced by BASALT.
+    binset : str
+        Path to the bin folder that contains ``*_genomes.fa`` files.
+    num_threads : int
+        Number of worker processes for propagating connections within bins.
+
+    Returns
+    -------
+    dict
+        Mapping ``bin_name -> dict(contig_id -> level)`` for connecting contigs.
+    dict
+        Mapping ``contig_id -> dict(neighbor_id -> connection_level)`` capturing
+        the PE connection graph.
+    dict
+        Mapping ``bin_name -> dict(level -> list(contig_id))`` grouping
+        connecting contigs by connection depth.
+    """
+    pwd = os.getcwd()
     print('Finding common contigs of---', assembly, '---from---', binset, 'using ---', PE_connections_file)
     bin_contigs, bin_contigs_mock, bin_seq, bin_select_contigs={}, {}, {}, {}
     os.chdir(pwd+'/'+binset)
@@ -312,7 +477,28 @@ def PE_connecting_contigs(assembly, PE_connections_file, binset, num_threads):
     return bin_connecting_contigs2, connections, bin_connecting_contigs_level
 
 def test_outlier(connecting_contig, item_data, test_index):
-    # print('Judging', connecting_contig
+    """
+    Test whether a contig is an outlier based on coverage statistics.
+
+    The decision is based on the IQR rule applied to projected coverage
+    (or combined coverage/TNF features) for a bin.
+
+    Parameters
+    ----------
+    connecting_contig : str
+        Identifier of the contig being tested.
+    item_data : list of float
+        One-dimensional array of feature values for the bin.
+    test_index : int
+        Index of the element in ``item_data`` that corresponds to the
+        contig under evaluation.
+
+    Returns
+    -------
+    int
+        ``1`` if the contig is considered non-outlier and should be kept,
+        ``0`` otherwise.
+    """
     four = pd.Series(item_data).describe()
     # print(four)
     # print('Q1= {0}, Q2= {1}, Q3={2}'.format(four['25%'],four['50%'],four['75%']))
@@ -329,7 +515,26 @@ def test_outlier(connecting_contig, item_data, test_index):
         stat=1
     return stat
 
+
 def PCA_slector(data_array, num_contig):
+    """
+    Project coverage / TNF features to a single principal component.
+
+    Parameters
+    ----------
+    data_array : numpy.ndarray
+        Matrix of shape ``(num_contig, num_features)`` with per-contig
+        features.
+    num_contig : int
+        Number of contigs (rows) in ``data_array``.
+
+    Returns
+    -------
+    list of float
+        Single principal-component score per contig.
+    numpy.ndarray
+        Array of explained variance ratios for the PCA model.
+    """
     pca = PCA(n_components=1)
     pca.fit(data_array)
     explained_variance_ratio=pca.explained_variance_ratio_
@@ -346,7 +551,24 @@ def PCA_slector(data_array, num_contig):
             newData_list_item=item
     return newData_list_item, explained_variance_ratio
 
+
 def checkm(bin_folder, num_threads):
+    """
+    Run CheckM on a bin folder and parse quality metrics.
+
+    Parameters
+    ----------
+    bin_folder : str
+        Path to the folder containing per-bin FASTA files.
+    num_threads : int
+        Number of CPU threads to pass to ``checkm lineage_wf``.
+
+    Returns
+    -------
+    dict
+        Mapping ``bin_id -> dict`` with keys ``'marker lineage'``,
+        ``'Genome size'``, ``'Completeness'`` and ``'Contamination'``.
+    """
     pwd=os.getcwd()
     os.system('checkm lineage_wf -t '+str(num_threads)+' -x fa '+str(bin_folder)+' '+str(bin_folder)+'_checkm')
 
@@ -371,8 +593,40 @@ def checkm(bin_folder, num_threads):
     os.chdir(pwd)
     return refined_checkm
 
-def bin_comparison(original_bin_folder, new_bins_checkm, new_bin_folder, num_threads, total_contigs, level_num):
-    pwd=os.getcwd()
+def bin_comparison(original_bin_folder, new_bins_checkm, new_bin_folder,
+                   num_threads, total_contigs, level_num):
+    """
+    Compare original bins and retrieved bins to select improved versions.
+
+    The function combines CheckM quality metrics with contig-level
+    information to decide whether a refined bin should replace its
+    original counterpart, and prepares additional bins for deep
+    refinement when moderately improved.
+
+    Parameters
+    ----------
+    original_bin_folder : str
+        Folder containing the original bins before within-group retrieval.
+    new_bins_checkm : dict
+        Mapping ``bin_id -> quality_metrics`` for refined bins, typically
+        generated by :func:`checkm`.
+    new_bin_folder : str
+        Folder containing the refined bins after retrieval.
+    num_threads : int
+        Number of threads (kept for API symmetry; CheckM call already done).
+    total_contigs : dict
+        Mapping ``bin_id -> set(contig_id)`` for all contigs encountered
+        in previous steps, used to identify novel contigs.
+    level_num : int
+        Retrieval level index, used for naming deep refinement folders.
+
+    Returns
+    -------
+    None
+        Results are written to multiple text files in the working directory
+        and refined bin FASTA files are moved between folders as needed.
+    """
+    pwd = os.getcwd()
     print('Comparing bins before and after refining process')
     os.chdir(pwd+'/'+str(original_bin_folder))
     bin_checkm, bin_seq_rec, selected_bin = {}, {}, {}
@@ -1034,10 +1288,35 @@ def parse_dict(related_file):
     return contig_level
 
 def combat_within_group(bestbinset, assembly_list, pwd, cpn_cutoff, ctn_cutoff):
+    """
+    Perform within-group dereplication among bins from the same assembly.
+
+    This function reads pairwise bin comparison results from the
+    ``*_comparison_files`` folders, identifies pairs of bins that both
+    satisfy the completeness/contamination thresholds, and groups bins
+    within each assembly that should be considered together.
+
+    Parameters
+    ----------
+    bestbinset : str
+        Folder name of the best binset (e.g. ``BestBinset``).
+    assembly_list : list of str
+        List of assembly FASTA files whose comparison folders will be parsed.
+    pwd : str
+        Working directory path.
+    cpn_cutoff : float
+        Minimum completeness threshold for selecting bins.
+    ctn_cutoff : float
+        Maximum contamination threshold for selecting bins.
+
+    Returns
+    -------
+    None
+        The function groups bins and writes updated within-group relationships
+        to files in the working directory; it does not return a Python object.
+    """
     # bestbinset='BestBinset'
-    # assembly_list=['16_high_cat_spades.fasta','17_high_S001_spades.fasta','18_high_S002_spades.fasta','19_high_S003_spades.fasta','20_high_S004_spades.fasta','21_high_S005_spades.fasta']
-    # # assembly_list=['16_high_cat_spades.fasta']
-    # pwd=os.getcwd()
+    # assembly_list=['16_high_cat_spades.fasta', ...]
     bin_contigs, bin_contigs_mock, bin_seq, bin_select_contigs={}, {}, {}, {}
     os.chdir(pwd+'/'+bestbinset)
     for root, dirs, files in os.walk(pwd+'/'+bestbinset):
@@ -1201,7 +1480,52 @@ def combat_within_group(bestbinset, assembly_list, pwd, cpn_cutoff, ctn_cutoff):
     f.close()
     return max_iteration2
 
-def Contig_retrieve_within_group(assemblies_list, binset, outlier_remover_folder, PE_connections_list, num_threads, last_step, coverage_matrix_list, pwd, cpn_cutoff, ctn_cutoff):
+def Contig_retrieve_within_group(assemblies_list, binset, outlier_remover_folder,
+                                 PE_connections_list, num_threads, last_step,
+                                 coverage_matrix_list, pwd, cpn_cutoff,
+                                 ctn_cutoff):
+    """
+    Run within-group contig retrieval and dereplication for a binset.
+
+    This orchestrates the S7 step for the CheckM branch by:
+
+    1. Grouping bins within the same assembly.
+    2. Recording coverage matrices per retrieval level.
+    3. Identifying connecting contigs via PE connections.
+    4. Filtering contigs using PCA/IQR-based outlier detection.
+    5. Updating bins and CheckM quality reports across iterations.
+
+    Parameters
+    ----------
+    assemblies_list : list of str
+        Assemblies associated with the current binset.
+    binset : str
+        Folder containing the starting bins for this retrieval level.
+    outlier_remover_folder : str
+        Folder produced by the S5 outlier-remover step.
+    PE_connections_list : list of str
+        Paths to PE connection tables per assembly.
+    num_threads : int
+        Number of worker processes for coverage parsing and connection
+        expansion.
+    last_step : int
+        Last completed iteration recorded in the S7 checkpoint file; used
+        to resume partial runs.
+    coverage_matrix_list : list of str
+        Paths to coverage matrix files for the assemblies.
+    pwd : str
+        Working directory path.
+    cpn_cutoff : float
+        Minimum completeness threshold for keeping bins.
+    ctn_cutoff : float
+        Maximum contamination threshold for keeping bins.
+
+    Returns
+    -------
+    None
+        All intermediate and final results are written to disk in subfolders
+        under ``pwd``. The function does not return a Python object.
+    """
     # pwd=os.getcwd()
     assemblies={}
     for item in assemblies_list:
@@ -1875,8 +2199,43 @@ def finding_black_contigs(binset, binset2, outlier_remover_folder, pwd, level_nu
 
     return black_contigs2, grey_contigs, total_contigs2
 
-def Contig_retrieve_within_group_main(binset, outlier_remover_folder, num_threads, parameter, cpn_cutoff, ctn_cutoff, assemblies_list, PE_connections_list, coverage_matrix_list):
-    pwd=os.getcwd()
+def Contig_retrieve_within_group_main(binset, outlier_remover_folder,
+                                      num_threads, parameter, cpn_cutoff,
+                                      ctn_cutoff, assemblies_list,
+                                      PE_connections_list,
+                                      coverage_matrix_list):
+    """
+    Entry point for S7 within-group contig retrieval (CheckM branch).
+
+    Parameters
+    ----------
+    binset : str
+        Folder containing the starting bins (typically BestBinset).
+    outlier_remover_folder : str
+        Folder containing the outlier-refined binset from S5.
+    num_threads : int
+        Number of worker processes for coverage parsing and PE graph
+        expansion.
+    parameter : str
+        Run mode; currently used for future extensions (e.g. resume).
+    cpn_cutoff : float
+        Minimum completeness threshold for bin acceptance.
+    ctn_cutoff : float
+        Maximum contamination threshold for bin acceptance.
+    assemblies_list : list of str
+        Assemblies associated with the binset.
+    PE_connections_list : list of str
+        Paths to PE connection tables per assembly.
+    coverage_matrix_list : list of str
+        Paths to coverage matrix files per assembly.
+
+    Returns
+    -------
+    None
+        This function logs its progress to ``BASALT_log.txt`` and delegates
+        the actual work to :func:`Contig_retrieve_within_group`.
+    """
+    pwd = os.getcwd()
 
     last_step=0
     print('--------------------------------------')

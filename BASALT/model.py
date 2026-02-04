@@ -35,6 +35,19 @@ class LBR(nn.Module):
 
 
 class MLP(nn.Module):
+    """
+    Multi-layer perceptron used for contamination classification.
+
+    Parameters
+    ----------
+    num_classes : int
+        Number of output classes (e.g. 2 for real vs contaminated).
+    input_size : int
+        Dimensionality of the input feature vector.
+    hidden_size : int, optional
+        Size of the hidden representation used in the LBR blocks.
+    """
+
     def __init__(self, num_classes, input_size, hidden_size=256):
         super(MLP, self).__init__()
         self.embed = nn.Linear(input_size, hidden_size)
@@ -43,9 +56,21 @@ class MLP(nn.Module):
         self.cls = nn.Linear(hidden_size, num_classes)
 
     def forward(self, x):
+        """
+        Forward pass through the MLP classifier.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input tensor of shape ``(batch_size, input_size)``.
+
+        Returns
+        -------
+        torch.Tensor
+            Logits of shape ``(batch_size, num_classes)``.
+        """
         x = self.embed(x)
         x = self.m1(x) + x
         x = self.m2(x) + x
         x = self.cls(x)
         return x
-

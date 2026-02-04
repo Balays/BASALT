@@ -440,9 +440,36 @@ def checkm_eval(bin_contigs, bin_folder, confirmed_outlier, pwd, num_threads):
     os.chdir(pwd)
 
 def kmer_cal(input_file, output_file):
+    """
+    Calculate k-mer features for the given FASTA and write to output file.
+    """
     os.system('calc.kmerfreq.pl -i '+str(input_file)+' -o '+str(output_file))
 
-def outlier_remover_main(bin_folder, depth_list, datasets, assemblies_list, pwd, num_threads):
+def outlier_remover_main(bin_folder, depth_list, datasets, assemblies_list,
+                         pwd, num_threads):
+    """
+    Entry point for S5 (CheckM branch): DL-based outlier removal using CheckM.
+
+    Parameters
+    ----------
+    bin_folder : str
+        Folder containing original BestBinset bins.
+    depth_list : list of str
+        List of coverage matrix files used for feature extraction.
+    datasets : dict
+        Mapping dataset_id -> [R1, R2] short-read files.
+    assemblies_list : list of str
+        List of modified assembly filenames.
+    pwd : str
+        Working directory.
+    num_threads : int
+        Number of threads to use.
+
+    Returns
+    -------
+    None
+        Writes refined binsets and intermediate logs to disk.
+    """
     # kmer_list=glob.glob(r'*.kmer.txt')
     # if len(kmer_list)==0:
     kmer_list=[]

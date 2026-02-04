@@ -14,7 +14,23 @@ from Bio import SeqIO
 from S2_BinsAbundance_PE_connections_multiple_processes_pool_10032023 import *
 import os
 
+
 def contig_id_recorder(genome_folder):
+    """
+    Record contig IDs and lengths for all bins in a genome folder list.
+
+    Parameters
+    ----------
+    genome_folder : list of str
+        List of binset folder name prefixes.
+
+    Returns
+    -------
+    tuple
+        (relation, best_hit_genome, bins_extract)
+        relation and best_hit_genome are initially empty and populated
+        later; bins_extract is the list of bins not selected as best hits.
+    """
     genomes_sum={}
     pwd=os.getcwd()
     n=0
@@ -105,6 +121,20 @@ def contig_id_recorder(genome_folder):
     return relation, best_hit_genome, bins_extract
 
 def checkm(genome_folder):
+    """
+    Read CheckM-like quality statistics for all bins in the given folders.
+
+    Parameters
+    ----------
+    genome_folder : list of str
+        List of binset folder name prefixes.
+
+    Returns
+    -------
+    dict
+        Mapping bin_id -> quality metrics (completeness, contamination,
+        genome size, N50, optional marker lineage).
+    """
     pwd=os.getcwd()
     bins_checkm={}
     print(pwd)
@@ -155,6 +185,21 @@ def checkm(genome_folder):
     return bins_checkm
 
 def genome_selector(best_hit_genome, bin_set_checkm):
+    """
+    Select best representative bins between candidate bin pairs.
+
+    Parameters
+    ----------
+    best_hit_genome : dict
+        Mapping representing best hit pairs between bins.
+    bin_set_checkm : dict
+        Mapping bin_id -> CheckM-derived metrics.
+
+    Returns
+    -------
+    dict
+        Mapping selected_bin_id -> summary string of comparison.
+    """
     print('Selecting bin-set')
     print('------------------')
     bin_selected={}
@@ -192,6 +237,25 @@ def genome_selector(best_hit_genome, bin_set_checkm):
     return bin_selected
 
 def two_groups_comparator(assembly, binset1, binset2, num):
+    """
+    Compare two binsets belonging to the same assembly group.
+
+    Parameters
+    ----------
+    assembly : str
+        Assembly name.
+    binset1 : str
+        First binset folder prefix.
+    binset2 : str
+        Second binset folder prefix.
+    num : int
+        Iteration index used in filenames.
+
+    Returns
+    -------
+    None
+        Writes comparison outputs and best-bin selections to disk.
+    """
     pwd=os.getcwd()
     try:
         fx=open('Basalt_log.txt','a')
@@ -292,6 +356,23 @@ def two_groups_comparator(assembly, binset1, binset2, num):
     f_s3.write(str(assembly)+'\t'+str(num)+'\t'+binset1+' and '+binset2+' comparison done'+'\n')
 
 def bin_within_a_group_comparitor(binset, assembly, num):
+    """
+    Compare bins within a single binset and select best representatives.
+
+    Parameters
+    ----------
+    binset : str
+        Binset folder prefix.
+    assembly : str
+        Assembly name.
+    num : int
+        Iteration index used in filenames.
+
+    Returns
+    -------
+    None
+        Writes intermediate and best-bin files to disk.
+    """
     pwd=os.getcwd()
     print('Comparing bins in final iteration')
     print('Parsing bins')
@@ -490,6 +571,19 @@ def bin_within_a_group_comparitor(binset, assembly, num):
     return str(assembly)+'_BestBinsSet'
 
 def binset_filtration(binset):
+    """
+    Filter bins based on connections, coverage and quality metrics.
+
+    Parameters
+    ----------
+    binset : str
+        Binset folder prefix.
+
+    Returns
+    -------
+    None
+        Modifies binset contents in-place (e.g. removing low-quality bins).
+    """
     print('Parsing '+binset)
     pwd=os.getcwd()
     os.chdir(pwd+'/'+binset)
@@ -544,6 +638,21 @@ def binset_filtration(binset):
     os.chdir(pwd)
 
 def bins_comparator_multiple_groups(genome_folder, assembly):
+    """
+    Top-level entry for S3: compare bins across multiple groups.
+
+    Parameters
+    ----------
+    genome_folder : list of str
+        List of binset folder prefixes for all groups.
+    assembly : str
+        Assembly name.
+
+    Returns
+    -------
+    str
+        Name of the final best-binset folder for the assembly.
+    """
     try:
         f_s3=open('S3_checkpoint.txt','a')
     except:

@@ -15,6 +15,22 @@ from multiprocessing import Pool
 
 
 def hybrid_parse_checkm(checkm_containing_folder,pwd):
+    """
+    Parse CheckM2 quality reports for hybrid reassembly (CheckM2 branch).
+
+    Parameters
+    ----------
+    checkm_containing_folder : str
+        Folder containing ``quality_report.tsv`` outputs.
+    pwd : str
+        Working directory path.
+
+    Returns
+    -------
+    dict
+        Mapping ``bin_id -> dict`` with keys ``'Genome size'``,
+        ``'Completeness'``, ``'Contamination'`` and ``'N50'``.
+    """
     #pwd=os.getcwd()
     bins_checkm={}
     os.chdir(pwd+'/'+checkm_containing_folder)
@@ -46,7 +62,35 @@ def hybrid_parse_checkm(checkm_containing_folder,pwd):
     os.chdir(pwd)
     return bins_checkm
 
-def assembly_mul(bins_seq_folder, bin_seq, item, reassembly_bin_folder, pwd, num_threads, ram):
+
+def assembly_mul(bins_seq_folder, bin_seq, item, reassembly_bin_folder,
+                 pwd, num_threads, ram):
+    """
+    Assemble short-read data for a single bin using SPAdes (CheckM2 branch).
+
+    Parameters
+    ----------
+    bins_seq_folder : str
+        Folder containing per-bin short-read FASTQ files.
+    bin_seq : dict
+        Mapping ``bin_id -> [r1_fastq, r2_fastq]`` with bin-specific reads.
+    item : str
+        Bin identifier to assemble.
+    reassembly_bin_folder : str
+        Folder where reassembled bin FASTA files will be written.
+    pwd : str
+        Working directory path.
+    num_threads : int
+        Number of threads to use for SPAdes.
+    ram : int
+        Maximum RAM (in GB) available to SPAdes.
+
+    Returns
+    -------
+    None
+        Writes SPAdes contig FASTA files into ``reassembly_bin_folder`` and
+        moves corrected reads into ``SPAdes_corrected_reads``.
+    """
     # try:
     #     os.system('mv '+pwd+'/'+bins_seq_folder+'/'+str(item)+'_seq_R1.fq.gz '+pwd+'/'+bins_seq_folder+'/'+str(item)+'_seq_R2.fq.gz '+pwd)
     #     os.system('gzip -d '+str(item)+'_seq_R1.fq.gz')
@@ -116,7 +160,33 @@ def assembly_mul(bins_seq_folder, bin_seq, item, reassembly_bin_folder, pwd, num
     # os.system('mv '+str(bin_seq[item][0])+' '+str(bin_seq[item][1])+' '+str(bins_seq_folder))
     os.system('rm '+str(item)+'_idba.fa')
 
-def SR_reassembly(bin_seq, reassembly_bin_folder, num_threads, bins_seq_folder, long_read, ram, pwd):
+def SR_reassembly(bin_seq, reassembly_bin_folder, num_threads,
+                  bins_seq_folder, long_read, ram, pwd):
+    """
+    Run short-read-only hybrid reassembly workflow (CheckM2 branch).
+
+    Parameters
+    ----------
+    bin_seq : dict
+        Mapping ``bin_id -> [r1_fastq, r2_fastq]`` with bin-specific reads.
+    reassembly_bin_folder : str
+        Folder where reassembled bin FASTA files will be written.
+    num_threads : int
+        Number of threads for SPAdes.
+    bins_seq_folder : str
+        Folder containing bin-specific short-read FASTQ files.
+    long_read : list of str
+        Long-read datasets (used indirectly when scheduling hybrid runs).
+    ram : int
+        Maximum RAM (in GB) available to assemblers.
+    pwd : str
+        Working directory path.
+
+    Returns
+    -------
+    dict
+        Mapping ``bin_id -> dict(checkm_metrics)`` for reassembled bins.
+    """
     num_project=1
     if num_threads >= 40:
         if num_threads < 60:
@@ -241,7 +311,40 @@ def hybrid_bin_comparison(paired_bins, bin_checkm):
     f.close()
     return best_bin, best_bin_checkm
 
-def hybrid_assembly_mul(sr_folder, bin_seq, item, bin_lr_reads, lr_folder, reassembly_bin_folder, pwd, num_threads, ram):
+def hybrid_assembly_mul(sr_folder, bin_seq, item, bin_lr_reads, lr_folder,
+                        reassembly_bin_folder, pwd, num_threads, ram):
+    """
+    Assemble hybrid (short + long read) data for a single bin using SPAdes
+    (CheckM2 branch).
+
+    Parameters
+    ----------
+    sr_folder : str
+        Folder containing short-read FASTQ files used for hybrid assembly.
+    bin_seq : dict
+        Mapping ``bin_id -> [r1_fastq, r2_fastq]`` with bin-specific reads.
+    item : str
+        Bin identifier to assemble.
+    bin_lr_reads : dict
+        Mapping ``bin_id -> long_read_fastq`` with bin-specific long reads.
+    lr_folder : str
+        Folder containing long-read FASTQ files.
+    reassembly_bin_folder : str
+        Folder where hybrid reassembled bin FASTA files will be written.
+    pwd : str
+        Working directory path.
+    num_threads : int
+        Number of threads to use for SPAdes.
+    ram : int
+        Maximum RAM (in GB) available to SPAdes.
+
+    Returns
+    -------
+    None
+        Writes hybrid reassembled contig FASTA files into
+        ``reassembly_bin_folder`` and uses ``SPAdes_corrected_reads``
+        to store corrected short reads.
+    """
     try:
         os.system('gzip -d '+pwd+'/SPAdes_corrected_reads/'+str(item)+'_seq_R1.fq.gz')
         os.system('gzip -d '+pwd+'/SPAdes_corrected_reads/'+str(item)+'_seq_R2.fq.gz')
@@ -279,7 +382,31 @@ def hybrid_assembly_mul(sr_folder, bin_seq, item, bin_lr_reads, lr_folder, reass
         # os.system('mv '+str(item)+'_spades_hybrid_reassembly/'+str(item)+'_SPAdes_hybrid_re-assembly_contigs.fa '+str(reassembly_bin_folder)+'/'+str(item)+'_SPAdes_hybrid_re-assembly_contigs.fa')
     os.system('rm -rf '+str(item)+'_spades_hybrid_reassembly')
 
-def hybrid_re_assembly_main(binset_folder, sr_folder, lr_folder, ram, num_threads):
+def hybrid_re_assembly_main(binset_folder, sr_folder, lr_folder,
+                            ram, num_threads):
+    """
+    Entry point for S9p hybrid reassembly (CheckM2 branch).
+
+    Parameters
+    ----------
+    binset_folder : str
+        Folder containing the starting binset.
+    sr_folder : str
+        Folder holding short-read FASTQ files used in hybrid assembly.
+    lr_folder : str
+        Folder holding long-read FASTQ files.
+    ram : int
+        Maximum RAM (in GB) available to assemblers.
+    num_threads : int
+        Number of threads to use for mapping and assembly.
+
+    Returns
+    -------
+    None
+        Coordinates short-read assembly, hybrid assembly, CheckM-based
+        bin comparison, and writes results into the hybrid reassembly
+        folders on disk.
+    """
     pwd=os.getcwd()
     bin_checkm={}
     try:

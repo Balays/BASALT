@@ -18,7 +18,22 @@ import numpy as np
 from multiprocessing import Pool
 # from Outlier_remover import *
 
-def checkm_tax_wf(marker_lineage_level_name, marker_lineage_taxon, num, folder_name):
+def checkm_tax_wf(marker_lineage_level_name, marker_lineage_taxon, num,
+                  folder_name):
+    """
+    Run ``checkm taxonomy_wf`` on a given bin folder.
+
+    Parameters
+    ----------
+    marker_lineage_level_name : str
+        Taxonomic level passed to CheckM (e.g. 'p', 'g').
+    marker_lineage_taxon : str
+        Taxon name at the specified level.
+    num : int
+        Number of threads.
+    folder_name : str
+        Folder containing bins; results are written to ``folder_name_checkm``.
+    """
     os.system('checkm taxonomy_wf -t '+str(num)+' -x fa '+str(marker_lineage_level_name)+' '+str(marker_lineage_taxon)+' '+str(folder_name)+' '+str(folder_name)+'_checkm')
 
 if __name__ == '__main__': 

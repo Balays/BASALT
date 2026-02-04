@@ -15,7 +15,26 @@ import sys, os, time
 from collections import Counter
 from multiprocessing import Pool
 
+
 def metabinner(assembly_file, depth_file, num_threads, ram, pwd, QC_software):
+    """
+    Run MetaBinner on a single assembly and depth profile.
+
+    Parameters
+    ----------
+    assembly_file : str
+        Assembly FASTA file.
+    depth_file : str
+        Coverage profile file.
+    num_threads : int
+        Number of threads to use.
+    ram : int
+        Available RAM in gigabytes (reserved for future use).
+    pwd : str
+        Working directory.
+    QC_software : {'checkm', 'checkm2'}
+        Quality control backend used for evaluating resulting bins.
+    """
     condaenv=os.popen('conda info --envs').read()
     a=condaenv.split('\n')
     # print(str(a))
@@ -82,6 +101,22 @@ def metabinner(assembly_file, depth_file, num_threads, ram, pwd, QC_software):
     os.system('rm -rf '+str(assembly_file)+'_metabinner '+str(assembly_file)+'_coverage_profile.tsv '+str(assembly_name)+'_kmer_4_f1000.csv')
 
 def vamb(assembly_file, datasets, num_threads, pwd, QC_software):
+    """
+    Run VAMB on a single assembly using mapped BAM files.
+
+    Parameters
+    ----------
+    assembly_file : str
+        Assembly FASTA file.
+    datasets : dict
+        Mapping dataset_id -> [R1, R2] reads used to construct BAMs.
+    num_threads : int
+        Number of threads to use.
+    pwd : str
+        Working directory.
+    QC_software : {'checkm', 'checkm2'}
+        Quality control backend for evaluating resulting bins.
+    """
     assembly_num=str(assembly_file).split('_')[0]
     for i in range(1, len(datasets)+1):
         if i == 1:
@@ -133,6 +168,22 @@ def vamb(assembly_file, datasets, num_threads, pwd, QC_software):
 
 
 def lorbin(assembly_file, datasets, num_threads, pwd, QC_software):
+    """
+    Run LorBin on a single assembly using mapped BAM files.
+
+    Parameters
+    ----------
+    assembly_file : str
+        Assembly FASTA file.
+    datasets : dict
+        Mapping dataset_id -> [R1, R2] reads used to construct BAMs.
+    num_threads : int
+        Number of threads to use.
+    pwd : str
+        Working directory.
+    QC_software : {'checkm', 'checkm2'}
+        Quality control backend for evaluating resulting bins.
+    """
     assembly_num=str(assembly_file).split('_')[0]
     for i in range(1, len(datasets)+1):
         if i == 1:
@@ -188,8 +239,10 @@ def lorbin(assembly_file, datasets, num_threads, pwd, QC_software):
 
 def extra_binner(binner, datasets, assembly_file, depth_file, num_threads, ram, pwd, QC_software):
     """
-    Dispatcher function to select and run the appropriate binner.
-    Updated to include LorBin ('l').
+    Dispatcher function to select and run the appropriate extra binner.
+
+    Supports MetaBinner ('m'), VAMB ('v') and LorBin ('l'), and returns
+    a list of new binset folder names produced by the selected tools.
     """
     extra_bin_folder =[]
     

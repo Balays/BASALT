@@ -8,7 +8,6 @@ CheckM outputs together with long-read mappings.
 """
 
 from ast import excepthandler
-# from imp import NullImporter
 from selectors import EpollSelector
 from telnetlib import SE
 from xmlrpc.server import SimpleXMLRPCRequestHandler
@@ -17,8 +16,106 @@ import sys, os, threading, copy, math
 from multiprocessing import Pool
 
 
+def parse_sam_bwa(sam_file, fq, pair, n, batch, mp_run):
+    """
+    Parse BWA SAM output and split paired reads by bin (CheckM branch).
+
+    Parameters
+    ----------
+    sam_file : str
+        Path to the SAM file produced by BWA.
+    fq : dict
+        Mapping ``bin_id -> dict(read_id -> int)`` tracking how many
+        mates of a read pair have been written.
+    pair : dict
+        Temporary mapping ``bin_id -> dict(read_id -> int)`` used to
+        count paired hits before writing FASTQ records.
+    n : int
+       Dataset index, used to prefix read IDs.
+    batch : int
+        Batch index for logging and file naming.
+    mp_run : int
+        Multiprocessing run index, used in output file names.
+
+    Returns
+    -------
+    None
+        Writes bin-specific paired-end FASTQ files and a summary file
+        ``Bin_reads_summary.txt`` in the working directory.
+    """
+    print('Reading reads id')
+    f_not_mapped_reads = open(
+        'Not_mapped_reads_' + str(batch) + '_' + str(mp_run) + '.txt', 'a'
+    )
+    m, m1, m2 = 0, 0, 0
+    for line in open(sam_file, 'r'):
+        m1 += 1
+        flist = str(line).split('\t')
+        if len(flist) >= 12:
+            bin_id_o = flist[2]
+            if bin_id_o != '*':
+                bin_id = flist[2].split('_')[0]
+                read_id = flist[0]
+                read_id_name = str(n) + '_' + read_id
+                try:
+                    pair[bin_id][read_id_name] += 1
+                except:
+                    pair[bin_id][read_id_name] = 1
+        if m1 % 1000000 == 0:
+            print('Read', m1, 'lines')
+
+    for bin_id in pair.keys():
+        for read_id_name in pair[bin_id].keys():
+            if pair[bin_id][read_id_name] == 2:
+                fq[bin_id][read_id_name] = 0
+
+    pair = {}
+    f_summary = open('Bin_reads_summary.txt', 'a')
+    for item in fq.keys():
+        f_summary.write(str(item) + ' SEQ number:' + str(len(fq[item])) + '\n')
+    f_summary.close()
+
+    print('Parsing', sam_file)
+    for line in open(sam_file, 'r'):
+        m += 1
+        flist = str(line).split('\t')
+        if len(flist) >= 12:
+            bin_id_o = flist[2]
+            if bin_id_o != '*':
+                bin_id = flist[2].split('_')[0]
+                read_id = flist[0]
+                read_id_name = str(n) + '_' + read_id  #
+                fq_seq = flist[9] + '\n' + '+' + '\n' + flist[10] + '\n'
+                try:
+                    fq[bin_id][read_id_name] += 1
+                    i = fq[bin_id][read_id_name]
+                    f1 = open(str(bin_id) + '_seq_R' + str(i) + '.fq', 'a')
+                    f1.write('@' + str(read_id_name) + ' ' + str(i) + '\n' + str(fq_seq))
+                    f1.close()
+                    if i == 2:
+                        del fq[bin_id][read_id_name]
+                except:
+                    f_not_mapped_reads.write(str(read_id_name) + '\n')
+
+        if m % 1000000 == 0:
+            print('Parsed', m, 'lines')
+    f_not_mapped_reads.close()
+
+
 def record_bin(binset_folder):
-    pwd=os.getcwd()
+    """
+    Concatenate all bin FASTA files into a single FASTA file.
+
+    Parameters
+    ----------
+    binset_folder : str
+        Folder containing per-bin FASTA files.
+
+    Returns
+    -------
+    None
+        Writes ``Total_bins.fa`` in the working directory.
+    """
     os.chdir(pwd+'/'+binset_folder)
     record_seq, record_bin_seq = {}, {}
     for root, dirs, files in os.walk(pwd+'/'+binset_folder):
@@ -40,6 +137,32 @@ def record_bin(binset_folder):
     f.close()
 
 def mod_bin(binset_folder):
+    """
+    Create a re-indexed version of a binset with sequential bin IDs.
+
+    The function writes a mapping between original and new bin IDs,
+    a new CheckM ``bin_stats_ext.tsv``-style file, and a combined
+    ``Total_bins.fa`` for the new binset.
+
+    Parameters
+    ----------
+    binset_folder : str
+        Folder containing the original per-bin FASTA and CheckM output.
+
+    Returns
+    -------
+    str
+        Name of the new binset folder (``<binset_folder>_mod``).
+    str
+        Path to the combined ``Total_bins.fa`` in the working directory.
+    list of str
+        List of new bin IDs (``bin1``, ``bin2``, ...).
+    dict
+        Mapping ``bin_id -> quality_metrics`` parsed from the CheckM
+        ``bin_stats_ext.tsv`` file.
+    dict
+        Mapping from original bin name prefix to new bin ID.
+    """
     pwd=os.getcwd()
     bins_checkm={}
     try:
@@ -236,8 +359,25 @@ def parse_sam(sam_file, fq, pair, n, batch, mp_run):
     # return fq
 
 def parse_lr_sam(sam_file, long_read, sn):
+    """
+    Group long reads by bin based on SAM alignments (CheckM branch).
+
+    Parameters
+    ----------
+    sam_file : str
+        Path to the SAM file produced by mapping long reads to bins.
+    long_read : str
+        Path to the original long-read FASTQ file.
+    sn : int
+        Index of the long-read file, used in output naming.
+
+    Returns
+    -------
+    dict
+        Mapping ``bin_id -> dict(long_read_id -> None)`` indicating which
+        long reads map to each bin.
+    """
     print('Reading long reads id '+str(long_read))
-    # f_not_mapped_reads=open('Not_mapped_reads.txt','w')
     bin_lr, bin_lr2, lr_bin, lr_bin2 = {}, {}, {}, {}
     m, m1, m2 = 0, 0, 0
     for line in open(sam_file,'r'):
@@ -332,7 +472,35 @@ def parse_lr_sam(sam_file, long_read, sn):
     print('Long reads '+str(long_read)+' splitting done!')
     return bin_lr
 
-def mapping_sr(total_fa, datasets_list, fq, pair, mapping_tool, num_threads, batch, mp_run):
+def mapping_sr(total_fa, datasets_list, fq, pair, mapping_tool,
+               num_threads, batch, mp_run):
+    """
+    Map short reads to bins and prepare bin-specific FASTQ files (CheckM branch).
+
+    Parameters
+    ----------
+    total_fa : str
+        Path to the concatenated bin FASTA file used as mapping reference.
+    datasets_list : dict
+        Mapping ``sample_id -> [r1_fastq, r2_fastq]`` with paired-end reads.
+    fq : dict
+        Mapping ``bin_id -> dict(read_id -> int)`` used to track mates.
+    pair : dict
+        Temporary mapping used when counting paired hits.
+    mapping_tool : {'bw2', 'bwa'}
+        Mapping backend to use: Bowtie2 (``'bw2'``) or BWA-MEM (``'bwa'``).
+    num_threads : int
+        Number of threads for the mapping program.
+    batch : int
+        Batch index for logging and file naming.
+    mp_run : int
+        Multiprocessing run index for file naming.
+
+    Returns
+    -------
+    None
+        Writes bin-specific FASTQ files and summary statistics to disk.
+    """
     f=open('Not_mapped_reads_'+str(batch)+'_'+str(mp_run)+'.txt','w')
     f.close()
 
@@ -358,7 +526,47 @@ def mapping_sr(total_fa, datasets_list, fq, pair, mapping_tool, num_threads, bat
             parse_sam_bwa(str(item)+'.sam', fq, pair, n, 2, mp_run)
             os.system('rm '+str(item)+'.sam')
 
-def sr_polishing(bin_id, bin_seq, target_folder, sr_folder, num_threads, pwd, binset_folder, type, initial_bin_name, mapping_tool, mp_run, major_run, batch):
+def sr_polishing(bin_id, bin_seq, target_folder, sr_folder, num_threads,
+                 pwd, binset_folder, type, initial_bin_name, mapping_tool,
+                 mp_run, major_run, batch):
+    """
+    Iteratively polish a single bin using short-read mappings (CheckM branch).
+
+    Parameters
+    ----------
+    bin_id : str
+        Identifier of the bin to polish.
+    bin_seq : dict
+        Mapping ``bin_id -> [r1_fastq, r2_fastq]`` with polishing reads.
+    target_folder : str
+        Folder containing the initial bin FASTA files.
+    sr_folder : str
+        Folder where short-read (SR) polishing intermediate files reside.
+    num_threads : int
+        Number of threads to use for mapping and polishing.
+    pwd : str
+        Working directory path.
+    binset_folder : str
+        Original binset folder name used to build output paths.
+    type : {'lr_polishing', 'MAG_polishing'}
+        Polishing mode; determines output folder and naming conventions.
+    initial_bin_name : str
+        Name of the original bin FASTA file used as polishing seed.
+    mapping_tool : {'bw2', 'bwa'}
+        Mapping backend used during polishing.
+    mp_run : int
+        Multiprocessing run index for scheduling.
+    major_run : int
+        Index of the major polishing round controlling iteration count.
+    batch : int
+        Polishing batch index for logging.
+
+    Returns
+    -------
+    None
+        Writes polished MAG FASTA files into the appropriate output folder
+        (e.g. ``*_MAGs_polished``), and logs progress to ``BASALT_log.txt``.
+    """
     r1=bin_seq[bin_id][0]
     r2=bin_seq[bin_id][1]
     xyz, prun=1, 0
@@ -599,6 +807,27 @@ def sr_polishing(bin_id, bin_seq, target_folder, sr_folder, num_threads, pwd, bi
             xyz=0
             
 def gf_lr_direct_polishing(gf_lr_fa, datasets_list, num_threads, pwd):
+    """
+    Directly polish a gap-filled / long-read merged binset (CheckM branch).
+
+    Parameters
+    ----------
+    gf_lr_fa : str
+        Path to the merged bin FASTA file after gap filling / long-read
+        extension.
+    datasets_list : dict
+        Mapping ``sample_id -> [r1_fastq, r2_fastq]`` with polishing reads.
+    num_threads : int
+        Number of threads available for mapping.
+    pwd : str
+        Working directory path.
+
+    Returns
+    -------
+    None
+        Polishes the input binset in-place and writes updated FASTA files
+        to the working directory.
+    """
     fa_name=gf_lr_fa
     xyz, tp = 1, 0
     while xyz == 1:

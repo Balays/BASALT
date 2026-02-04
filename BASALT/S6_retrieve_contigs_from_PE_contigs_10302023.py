@@ -18,7 +18,32 @@ import numpy as np
 from multiprocessing import Pool
 # from Outlier_remover import *
 
-def lr_connecting_contigs(assembly, lr_connnecting_file, binset, bin_contig, num_threads):
+
+def lr_connecting_contigs(assembly, lr_connnecting_file, binset,
+                          bin_contig, num_threads):
+    """
+    Identify contigs connected by long reads for each bin.
+
+    Parameters
+    ----------
+    assembly : str
+        Assembly name (used only for logging).
+    lr_connnecting_file : str
+        File listing long-read–contig connections.
+    binset : str
+        Binset folder name.
+    bin_contig : dict
+        Mapping bin_id -> {contig_id -> seq}.
+    num_threads : int
+        Number of threads (reserved for future use).
+
+    Returns
+    -------
+    tuple
+        (connecting_contigs3, connecting_contigs3_level) where keys are
+        bin_ids and values are dictionaries of connecting contigs and
+        their connection scores.
+    """
     connecting_contigs = {}
     for bins in bin_contig.keys():
         connecting_contigs[bins]={}
@@ -117,6 +142,9 @@ def lr_connecting_contigs(assembly, lr_connnecting_file, binset, bin_contig, num
     return connecting_contigs3, connecting_contigs3_level
 
 def coverage_matrix_mpt(coverage_matrix_file, num):
+    """
+    Parse coverage matrix file and return contig-wise coverage dict.
+    """
     contig_cov={}
     n=0
     for line in open(str(coverage_matrix_file),'r'):
@@ -128,7 +156,11 @@ def coverage_matrix_mpt(coverage_matrix_file, num):
                 contig_cov[ids][i]=float(str(line).strip().split('\t')[3*i+1])
     return contig_cov, num
 
-def bin_contig_recruite(bin_contig_cov, bin_contigs, bin_contigs_mock, contig_id, contig_cov, num):
+def bin_contig_recruite(bin_contig_cov, bin_contigs, bin_contigs_mock,
+                        contig_id, contig_cov, num):
+    """
+    Recruit contigs into bin-specific coverage matrices.
+    """
     for bin_name in bin_contigs.keys():
         bin_contigs_mock[bin_name][contig_id]=1
         if len(bin_contigs_mock[bin_name]) == len(bin_contigs[bin_name]):
@@ -140,6 +172,23 @@ def bin_contig_recruite(bin_contig_cov, bin_contigs, bin_contigs_mock, contig_id
     return bin_contig_cov, num
 
 def record_bin_coverage(binset, num_threads, coverage_matrix_list):
+    """
+    Record coverage profiles for all contigs in all bins.
+
+    Parameters
+    ----------
+    binset : str
+        Binset folder name.
+    num_threads : int
+        Number of threads for coverage parsing.
+    coverage_matrix_list : list of str
+        List of coverage matrix filenames.
+
+    Returns
+    -------
+    tuple
+        (bin_contig_cov, bin_contigs, contig_cov)
+    """
     pwd=os.getcwd()
     bin_contigs, contig_bin_list, bin_contigs_mock, m = {}, {}, {}, 0
     print('Parsing bins')
@@ -219,7 +268,11 @@ def record_bin_coverage(binset, num_threads, coverage_matrix_list):
     os.chdir(pwd)
     return bin_contig_cov, bin_contigs, contig_cov
 
-def cycle_mt(bin_connecting_contigs, bin_connecting_contigs2, bin_connecting_contigs3, connections, bins):
+def cycle_mt(bin_connecting_contigs, bin_connecting_contigs2,
+             bin_connecting_contigs3, connections, bins):
+    """
+    Expand connecting contig sets by traversing PE connection graph.
+    """
     m, m_before, m_after=1, 0, 1
     print('Parsing', bins)
     bin_connecting_contigs_x, num_list = {}, []
