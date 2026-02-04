@@ -1,6 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
-#coding=utf-8
+
+"""
+Step S1p: Merge closely related bins within the same assembly group.
+
+This module analyses paired-end connection files, depth matrices, and
+CheckM statistics to identify candidate bin pairs that likely belong
+to the same genome, and records them for downstream merging.
+"""
 
 from Bio import SeqIO
 import sys, os, threading, copy
@@ -8,7 +15,18 @@ from multiprocessing import Pool
 from collections import Counter
 from time import ctime,sleep
 
+
 def seq_recorder(bin_folder, pwd):
+    """
+    Index contig IDs for each bin in the given folder.
+
+    Returns
+    -------
+    seqs_record : dict
+        Mapping contig_id -> pipe-separated list of bin filenames.
+    file_seqs_record : dict
+        Mapping bin filename -> list of contig IDs it contains.
+    """
     seqs_record, file_seqs_record = {}, {}
     for root,dirs,files in os.walk(pwd+'/'+bin_folder):
         for file in files:
@@ -25,6 +43,25 @@ def seq_recorder(bin_folder, pwd):
     return seqs_record, file_seqs_record
 
 def bin_group(PE_connection_file, seqs_record, pwd):
+    """
+    Build bin–bin connection scores based on paired-end connections.
+
+    Parameters
+    ----------
+    PE_connection_file : str
+        Path to the PE connection summary file.
+    seqs_record : dict
+        Mapping from contig IDs to bin filenames as produced by
+        ``seq_recorder``.
+    pwd : str
+        Working directory.
+
+    Returns
+    -------
+    dict
+        Mapping bin1 -> bin2 for candidate bin pairs that pass
+        connection score thresholds.
+    """
     genome_connection, bin_group1, m={}, {}, 0
     for line in open(pwd+'/'+str(PE_connection_file), 'r'):
         m+=1
@@ -92,6 +129,11 @@ def bin_group(PE_connection_file, seqs_record, pwd):
     return pair_bins
 
 def parse_checkm(bin_folder_checkm):
+    """
+    Parse CheckM bin statistics from ``bin_stats_ext.tsv``.
+
+    Returns a dictionary keyed by bin filename ('.fa' / '.fasta').
+    """
     checkm={}
     for line in open(str(bin_folder_checkm)+'/storage/bin_stats_ext.tsv','r'):
         binID=str(line).strip().split('{\'')[0].strip()
@@ -110,6 +152,13 @@ def parse_checkm(bin_folder_checkm):
     return checkm
 
 def depth_eval(file_seqs_record, depth_file, pair_bins, bin_folder):
+    """
+    Evaluate candidate bin pairs using per-sample depth profiles.
+
+    For each bin pair, this function calculates total and average
+    coverage across samples and records pairs with consistent depth
+    patterns and compatible CheckM taxonomy/completeness.
+    """
     n, depth_matrix, num = 0, {}, 0
     for line in open(depth_file,'r'):
         n+=1
@@ -186,7 +235,12 @@ def depth_eval(file_seqs_record, depth_file, pair_bins, bin_folder):
     f.close()
     f2.close()
 
-def merge_bin_within_the_same_assembly(assembly_binning_group, depth_files, PE_connections_files, assembly_names, num_threads):
+def merge_bin_within_the_same_assembly(assembly_binning_group, depth_files,
+                                       PE_connections_files, assembly_names,
+                                       num_threads):
+    """
+    Top-level driver to identify mergeable bin pairs within one assembly.
+    """
     print('-------------------------------')
     print(str(assembly_binning_group))
     print(str(depth_files))

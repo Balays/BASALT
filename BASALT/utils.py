@@ -1,4 +1,13 @@
 #!/usr/bin/env python
+
+"""
+Utility functions for BASALT deep learning components.
+
+This module provides helpers for downloading model weights, normalising
+feature matrices, managing logging directories, training and evaluating
+PyTorch models, and computing focal loss.
+"""
+
 import os
 import sys
 from glob import glob
@@ -59,6 +68,12 @@ def download_model(url, local_dir=None):
     return local_dir
 
 def del_best_ckpt(log_dir):
+    """
+    Remove all checkpoint files containing ``'best'`` in the given log directory.
+
+    This is typically used to clean up older best checkpoints when
+    re-running experiments.
+    """
     for i in glob(os.path.join(log_dir, '*best*')):
         os.remove(i)
 
