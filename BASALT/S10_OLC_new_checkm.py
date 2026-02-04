@@ -1,6 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
-#coding=utf-8
+
+"""
+Step S10 (CheckM branch): OLC-based refinement after reassembly.
+
+CheckM-specific implementation of the post-reassembly OLC elongation
+and comparison step, using CheckM-informed bin quality as guidance.
+"""
 
 from Bio import SeqIO
 from Bio.Seq import Seq
