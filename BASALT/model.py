@@ -1,7 +1,17 @@
 #!/usr/bin/env python
+
+"""
+Neural network architectures used in the BASALT DL modules.
+"""
+
 import torch.nn as nn
 
+
 class LBR(nn.Module):
+    """
+    Linear -> BatchNorm -> ReLU block used as a building unit.
+    """
+
     def __init__(self, hidden_size):
         super(LBR, self).__init__()
         self.fc1 = nn.Linear(hidden_size, 4*hidden_size)
@@ -38,5 +48,4 @@ class MLP(nn.Module):
         x = self.m2(x) + x
         x = self.cls(x)
         return x
-
 

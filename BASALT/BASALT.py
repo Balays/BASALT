@@ -1,11 +1,24 @@
 #!/usr/bin/python
 # -*- coding: UTF-8 -*-
-#coding=utf-8
 
-import time, sys, os
+"""
+Command-line interface for the BASALT metagenomic binning pipeline.
+
+This script parses user arguments and dispatches to the corresponding
+pipeline modules (autobinning, refinement, reassembly, data feeding,
+and dereplication) depending on the selected mode and options.
+"""
+
+import time
+import sys
+import os
 import argparse
 from glob import glob
 
+
+# ---------------------------------------------------------------------------
+# Argument parsing
+# ---------------------------------------------------------------------------
 parser = argparse.ArgumentParser(description='BASALT')
 parser.add_argument('-a', '--assemblies', type=str, dest='assemblies',
                     help='List of assemblies, e.g.: as1.fa,as2.fa')
@@ -76,7 +89,7 @@ ram=args.ram
 extrabinner=args.extra_binner
 min_cpn=args.Min_completeness
 max_ctn=args.Max_contamination
-continue_mode=new=args.running_mode
+continue_mode=args.running_mode
 functional_module=args.functional_module
 # autobining_parameters=args.autobining_parameters
 refinement_paramter=args.refinement_paramter
@@ -89,6 +102,9 @@ refinement_binset=args.refinement_binset
 coverage_list=args.coverage_list
 binsets_list=args.binsets_list
 
+# ---------------------------------------------------------------------------
+# Parse and normalize input lists
+# ---------------------------------------------------------------------------
 try:
     datasets_list=sr_datasets.split('/')
     datasets, n = {}, 0
@@ -162,6 +178,10 @@ try:
 except:
     binsets_list=[]
 
+
+# ---------------------------------------------------------------------------
+# High-level configuration summary
+# ---------------------------------------------------------------------------
 pwd=os.getcwd()
 print('Processing assemblies:', str(assembly_list))
 print('Processing short-reads:', str(datasets))
@@ -187,9 +207,13 @@ print('Refinement binset:', str(refinement_binset))
 print('List of coverage file(s):', str(coverage_list))
 print('Binset(s) list:', str(binsets_list))
 
+# Normalized continue mode used across downstream modules
 if continue_mode == 'continue':
     continue_mode = 'last'
 
+# ---------------------------------------------------------------------------
+# Main execution: select quality check implementation and functional module
+# ---------------------------------------------------------------------------
 if QC_software == 'checkm2':
     if len(data_feeding_folder) != 0:
         from Data_feeding import *

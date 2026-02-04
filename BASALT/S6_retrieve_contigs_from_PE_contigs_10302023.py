@@ -1,6 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
-#coding=utf-8
+
+"""
+Step S6 (CheckM2 branch): Contig retrieval from PE-supported connections.
+
+This module retrieves additional contigs for each bin based on
+paired-end connectivity and coverage patterns.
+"""
 
 import pandas as pd
 # import seaborn as sns

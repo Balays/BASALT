@@ -1,8 +1,17 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
-#coding=utf-8
 
-import time, sys, os
+"""
+Monolithic entry point for the BASALT pipeline (CheckM2 / default branch).
+
+This module wires together autobinning, dereplication, outlier removal,
+contig retrieval and reassembly. It uses the non-CheckM variants of
+the core steps and is the default path when quality_check is 'checkm2'.
+"""
+
+import time
+import sys
+import os
 from Bio import SeqIO
 from S1_Autobinners_2qc_11152023 import *
 from S1e_extra_binners import *
@@ -21,8 +30,17 @@ from S10_OLC_new_10262023 import *
 from glob import glob
 from Cleanup import *
 
-# def BASALT_main(assembly_list, datasets, num_threads, lr_list, ram, continue_mode, functional_module, autobinning_parameters, refinement_paramter, hybri_reassembly, max_ctn, min_cpn, pwd):
-def BASALT_main_d(assembly_list, datasets, num_threads, lr_list, hifi_list, hic_list, eb_list, ram, continue_mode, functional_module, sensitive, refinement_paramter, max_ctn, min_cpn, pwd, QC_software, output_folder):
+
+def BASALT_main_d(assembly_list, datasets, num_threads, lr_list, hifi_list,
+                  hic_list, eb_list, ram, continue_mode, functional_module,
+                  sensitive, refinement_paramter, max_ctn, min_cpn,
+                  pwd, QC_software, output_folder):
+    """
+    Run the default BASALT pipeline using CheckM2-based quality checks.
+
+    Parameters mirror those of ``BASALT_main_c_autobinning`` and related
+    modular entry points, but call the non-CheckM modules.
+    """
     ### Record the last accomplished step
     pwd=os.getcwd()
 

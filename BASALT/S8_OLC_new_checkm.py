@@ -1,6 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
-#coding=utf-8
+
+"""
+Step S8 (CheckM branch): OLC-based reassembly of selected bins.
+
+CheckM-specific OLC reassembly step that uses CheckM-informed
+bin selection as input.
+"""
 
 from Bio import SeqIO
 from Bio.Seq import Seq

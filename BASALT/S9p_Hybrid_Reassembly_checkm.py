@@ -1,4 +1,12 @@
 #!/usr/bin/env python
+
+"""
+Step S9p (CheckM branch): Hybrid reassembly using both short and long reads.
+
+CheckM-specific hybrid reassembly workflow leveraging CheckM bin
+quality statistics together with read mapping information.
+"""
+
 from Bio import SeqIO
 import sys, os, threading, copy, math
 from multiprocessing import Pool

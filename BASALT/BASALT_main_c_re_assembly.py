@@ -1,8 +1,16 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
-#coding=utf-8
 
-import time, sys, os
+"""
+Re-assembly entry point for the BASALT pipeline (CheckM-based branch).
+
+This module orchestrates OLC-based reassembly, hybrid reassembly, and
+final polishing of bins when long reads or HiFi datasets are provided.
+"""
+
+import time
+import sys
+import os
 from Bio import SeqIO
 from S4_Multiple_Assembly_Comparitor_multiple_processes_bwt_checkm import *
 from S8_OLC_new_checkm import *
@@ -12,8 +20,18 @@ from S10_OLC_new_checkm import *
 from glob import glob
 from Cleanup import *
 
-# def BASALT_main(assembly_list, datasets, num_threads, lr_list, ram, continue_mode, functional_module, autobinning_parameters, refinement_paramter, hybri_reassembly, max_ctn, min_cpn, pwd):
-def BASALT_main_c_re_assembly(assembly_list, datasets, num_threads, lr_list, hifi_list, hic_list, eb_list, ram, continue_mode, functional_module, sensitive, refinement_paramter, max_ctn, min_cpn, pwd, QC_software, output_folder):
+
+def BASALT_main_c_re_assembly(assembly_list, datasets, num_threads, lr_list, hifi_list,
+                              hic_list, eb_list, ram, continue_mode, functional_module,
+                              sensitive, refinement_paramter, max_ctn, min_cpn,
+                              pwd, QC_software, output_folder):
+    """
+    Run BASALT reassembly and polishing workflows.
+
+    Parameters mirror those of the main pipeline and include information
+    about assemblies, short reads, long reads/HiFi, quality thresholds,
+    and runtime configuration.
+    """
     ### Record the last accomplished step
     pwd=os.getcwd()
 

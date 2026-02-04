@@ -1,4 +1,13 @@
 #!/usr/bin/env python
+
+"""
+Step S9p (CheckM2 branch): Hybrid reassembly using both short and long reads.
+
+This module performs hybrid reassembly of bins by combining information
+from short-read and long-read datasets, aiming to maximise contiguity
+and assembly quality.
+"""
+
 from Bio import SeqIO
 import sys, os, threading, copy, math
 from multiprocessing import Pool

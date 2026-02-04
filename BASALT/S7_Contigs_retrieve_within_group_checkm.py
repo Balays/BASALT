@@ -1,6 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
-#coding=utf-8
+
+"""
+Step S7 (CheckM branch): Within-group contig retrieval.
+
+CheckM-specific implementation of within-group contig retrieval
+leveraging CheckM quality metrics where available.
+"""
 
 import pandas as pd
 # import seaborn as sns

@@ -1,8 +1,17 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
-#coding=utf-8
 
-import time, sys, os
+"""
+Autobinning entry point for the BASALT pipeline (CheckM-based branch).
+
+This module runs the initial binning workflows, including multiple
+autobinners and optional extra binners, and records progress in
+``Basalt_checkpoint.txt`` to support resumable execution.
+"""
+
+import time
+import sys
+import os
 from Bio import SeqIO
 from S1_Autobinners_2qc_11152023 import *
 from S1e_extra_binners import *
@@ -12,8 +21,51 @@ from S4_Multiple_Assembly_Comparitor_multiple_processes_bwt_checkm import *
 from glob import glob
 from Cleanup import *
 
-# def BASALT_main(assembly_list, datasets, num_threads, lr_list, ram, continue_mode, functional_module, autobinning_parameters, refinement_paramter, hybri_reassembly, max_ctn, min_cpn, pwd):
-def BASALT_main_c_autobinning(assembly_list, datasets, num_threads, lr_list, hifi_list, hic_list, eb_list, ram, continue_mode, functional_module, sensitive, refinement_paramter, max_ctn, min_cpn, pwd, QC_software, output_folder):
+
+def BASALT_main_c_autobinning(assembly_list, datasets, num_threads, lr_list, hifi_list,
+                              hic_list, eb_list, ram, continue_mode, functional_module,
+                              sensitive, refinement_paramter, max_ctn, min_cpn,
+                              pwd, QC_software, output_folder):
+    """
+    Run the BASALT autobinning module using CheckM-based quality control.
+
+    Parameters
+    ----------
+    assembly_list : list
+        List of assembly fasta file paths.
+    datasets : dict
+        Mapping from dataset id to paired-end read paths.
+    num_threads : int
+        Number of CPU threads to use.
+    lr_list : list
+        Long read datasets (ONT/PB).
+    hifi_list : list
+        HiFi read datasets.
+    hic_list : list
+        Hi-C datasets (if available).
+    eb_list : list
+        Extra binner identifiers to use in addition to the default set.
+    ram : int
+        Available RAM in gigabytes.
+    continue_mode : str
+        Either ``'last'`` to resume from checkpoints or ``'new'``.
+    functional_module : str
+        Functional mode flag from the top-level CLI (e.g. 'all', 'autobinning').
+    sensitive : str
+        Autobinning sensitivity level ('quick', 'sensitive', 'more-sensitive').
+    refinement_paramter : str
+        Refinement mode ('quick' or 'deep').
+    max_ctn : int
+        Maximum allowed contamination for bins.
+    min_cpn : int
+        Minimum required completeness for bins.
+    pwd : str
+        Working directory.
+    QC_software : str
+        Quality check software identifier, expected 'checkm' or 'checkm2'.
+    output_folder : str
+        Output folder name for final binsets.
+    """
     ### Record the last accomplished step
     pwd=os.getcwd()
 

@@ -1,5 +1,12 @@
 #!/usr/bin/env python
-# from symbol import except_clause
+
+"""
+Step S4 (CheckM branch): Multi-assembly comparison and dereplication.
+
+CheckM-specific implementation of cross-assembly bin comparison and
+initial dereplication using coverage and quality metrics.
+"""
+
 from Bio import SeqIO
 import sys, os, threading, copy, gc
 from multiprocessing import Pool

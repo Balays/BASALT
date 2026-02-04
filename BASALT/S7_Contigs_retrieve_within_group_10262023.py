@@ -1,6 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
-#coding=utf-8
+
+"""
+Step S7 (CheckM2 branch): Within-group contig retrieval.
+
+Retrieves additional contigs for each bin based on within-group
+similarity and connectivity, further improving completeness.
+"""
 
 import pandas as pd
 # import seaborn as sns

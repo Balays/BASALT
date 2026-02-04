@@ -1,4 +1,12 @@
 #!/usr/bin/env python
+
+"""
+Step S7lr (CheckM2 branch): Long-read-based contig retrieval and polishing.
+
+This module searches for short-read contigs using long-read evidence
+and performs polishing of bins when long-read datasets are available.
+"""
+
 from ast import excepthandler
 # from imp import NullImporter
 from selectors import EpollSelector

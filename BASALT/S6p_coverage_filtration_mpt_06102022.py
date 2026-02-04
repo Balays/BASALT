@@ -1,6 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
-#coding=utf-8
+
+"""
+Step S6p: Coverage-based filtration of contigs.
+
+Applies additional filters on coverage matrices to remove contigs
+with abnormal coverage prior to retrieval and reassembly.
+"""
 
 import pandas as pd
 # import seaborn as sns

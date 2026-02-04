@@ -1,9 +1,18 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
-#coding=utf-8
+
+"""
+Core routines for BASALT data feeding.
+
+These functions merge external binsets with existing BASALT results,
+recalculate coverage matrices and generate inputs for downstream
+dereplication and refinement modules.
+"""
 
 from Bio import SeqIO
-import sys, os, time
+import sys
+import os
+import time
 from collections import Counter
 
 def merge_bin(binset_folder, bs_id, pwd):

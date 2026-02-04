@@ -1,4 +1,12 @@
 #!/usr/bin/env python
+
+"""
+Final dereplication and reporting utilities for BASALT.
+
+This module performs PCA-based dereplication on bin sets and produces
+summary statistics for downstream evaluation.
+"""
+
 from Bio import SeqIO
 import sys, os, threading, copy
 from multiprocessing import Pool

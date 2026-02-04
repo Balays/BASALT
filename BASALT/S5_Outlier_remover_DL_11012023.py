@@ -1,6 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
-#coding=utf-8
+
+"""
+Step S5 (CheckM2 branch): Deep-learning-based outlier bin removal.
+
+This module applies trained DL models to identify and remove
+contaminated or low-quality bins, preparing cleaner binsets for
+subsequent contig retrieval and reassembly steps.
+"""
 
 from Bio import SeqIO
 import os, copy, math, glob, gc

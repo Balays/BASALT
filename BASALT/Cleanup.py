@@ -1,11 +1,31 @@
 #!/usr/bin/env python
+
+"""
+Helper utilities for cleaning up intermediate BASALT files.
+"""
+
 import os
 
+
 def cleanup(assembly_list):
+    """
+    Remove intermediate index/coverage files and archive key matrices.
+
+    Parameters
+    ----------
+    assembly_list : list
+        List of assemblies. Currently unused but kept for API compatibility.
+    """
     os.system('rm *.njs *.ndb *.nto *.ntf *.not *.nos')
     os.mkdir('Coverage_depth_connection_SimilarBin_files_backup')
-    os.system('mv *.depth.txt Coverage_matrix_* Combat_* condense_connections_* Connections_* Similar_bins.txt Coverage_depth_connection_SimilarBin_files_backup')
-    os.system('tar -zcvf Coverage_depth_connection_SimilarBin_files_backup.tar.gz Coverage_depth_connection_SimilarBin_files_backup')
+    os.system(
+        'mv *.depth.txt Coverage_matrix_* Combat_* condense_connections_* '
+        'Connections_* Similar_bins.txt Coverage_depth_connection_SimilarBin_files_backup'
+    )
+    os.system(
+        'tar -zcvf Coverage_depth_connection_SimilarBin_files_backup.tar.gz '
+        'Coverage_depth_connection_SimilarBin_files_backup'
+    )
     os.system('rm -rf Coverage_depth_connection_SimilarBin_files_backup')
     os.system('rm -rf *_kmer bin_coverage Bin_coverage_after_contamination_removal bin_comparison_folder bin_extract-eleminated-selected_contig Bins_blast_output')
     os.system('tar -zcvf Group_comparison_files.tar.gz *_comparison_files')

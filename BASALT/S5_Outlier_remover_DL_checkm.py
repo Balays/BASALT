@@ -1,6 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
-#coding=utf-8
+
+"""
+Step S5 (CheckM branch): Deep-learning-based outlier bin removal.
+
+CheckM-specific implementation of DL-based outlier removal using
+CheckM quality reports in combination with learned models.
+"""
 
 from Bio import SeqIO
 import os, copy, math, glob, gc

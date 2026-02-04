@@ -1,6 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
-#coding=utf-8
+
+"""
+Step S3 (CheckM branch): Within-group bin comparison and selection.
+
+This module is analogous to S3 for the CheckM-based pipeline, using
+coverage and PE connection information produced by CheckM-specific
+bin abundance routines.
+"""
 
 from tempfile import TemporaryFile
 from Bio import SeqIO

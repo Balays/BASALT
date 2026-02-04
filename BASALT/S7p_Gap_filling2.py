@@ -1,6 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
-#coding=utf-8
+
+"""
+Step S7p: Gap filling for BASALT bins.
+
+This step searches for bridging contigs to fill gaps between
+contigs within bins, attempting to improve contiguity (N50).
+"""
 
 from ast import excepthandler
 from stat import S_ISBLK

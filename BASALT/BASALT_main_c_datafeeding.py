@@ -1,8 +1,18 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
-#coding=utf-8
 
-import time, sys, os, copy
+"""
+Data-feeding entry point for the BASALT pipeline (CheckM-based branch).
+
+This module integrates external bin sets into an existing BASALT run,
+re-runs dereplication and outlier removal, and updates the final
+binset and CheckM summary after data feeding.
+"""
+
+import time
+import sys
+import os
+import copy
 from Bio import SeqIO
 from Data_feeding import *
 from S4_Multiple_Assembly_Comparitor_multiple_processes_bwt_checkm import *
@@ -10,7 +20,33 @@ from S5_Outlier_remover_DL_checkm import *
 from glob import glob
 from Cleanup import *
 
-def data_feeding_main(assembly_list, datasets, num_threads, data_feeding_folder, pwd, QC_software, output_folder, binsetindex, continue_mode):
+
+def data_feeding_main(assembly_list, datasets, num_threads, data_feeding_folder,
+                      pwd, QC_software, output_folder, binsetindex, continue_mode):
+    """
+    Perform BASALT data feeding and downstream dereplication/refinement.
+
+    Parameters
+    ----------
+    assembly_list : list
+        List of assembly fasta file paths.
+    datasets : dict
+        Mapping from dataset id to paired-end read paths.
+    num_threads : int
+        Number of CPU threads to use.
+    data_feeding_folder : list
+        List of external binset folders to be integrated.
+    pwd : str
+        Working directory.
+    QC_software : str
+        Quality check software identifier.
+    output_folder : str
+        Name of the original BASALT binset folder.
+    binsetindex : int
+        Start index used to enumerate additional binsets.
+    continue_mode : str
+        Either ``'last'`` to resume or ``'new'`` to start from scratch.
+    """
     #### Check existence of models
     user_dir = os.path.expanduser('~')
     # local_dir = f"{user_dir}/.cache/BASALT"

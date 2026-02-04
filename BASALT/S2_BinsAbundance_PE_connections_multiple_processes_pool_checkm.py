@@ -1,6 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
-#coding=utf-8
+
+"""
+Step S2 (CheckM branch): Bin abundance estimation and PE connections.
+
+This module mirrors S2 for the CheckM-based pipeline, generating
+coverage matrices and PE connection information compatible with
+CheckM quality reports.
+"""
 
 from lib2to3.fixes import fix_buffer
 from Bio import SeqIO

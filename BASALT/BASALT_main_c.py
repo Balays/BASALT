@@ -1,8 +1,19 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
-#coding=utf-8
 
-import time, sys, os
+"""
+Monolithic entry point for the BASALT pipeline (CheckM-based branch).
+
+This module contains a combined implementation that chains autobinning,
+refinement, and reassembly. It is largely superseded by the more
+modular entry points in ``BASALT_main_c_autobinning``,
+``BASALT_main_c_refinement`` and ``BASALT_main_c_re_assembly``,
+but is kept for backward compatibility.
+"""
+
+import time
+import sys
+import os
 from Bio import SeqIO
 from S1_Autobinners_2qc_11152023 import *
 from S1e_extra_binners import *
@@ -20,8 +31,17 @@ from S9p_Hybrid_Reassembly_checkm import *
 from S10_OLC_new_checkm import *
 from glob import glob
 
-# def BASALT_main(assembly_list, datasets, num_threads, lr_list, ram, continue_mode, functional_module, autobinning_parameters, refinement_paramter, hybri_reassembly, max_ctn, min_cpn, pwd):
-def BASALT_main_c(assembly_list, datasets, num_threads, lr_list, hifi_list, hic_list, eb_list, ram, continue_mode, functional_module, sensitive, refinement_paramter, max_ctn, min_cpn, pwd, QC_software, output_folder):
+
+def BASALT_main_c(assembly_list, datasets, num_threads, lr_list, hifi_list,
+                  hic_list, eb_list, ram, continue_mode, functional_module,
+                  sensitive, refinement_paramter, max_ctn, min_cpn,
+                  pwd, QC_software, output_folder):
+    """
+    Run the full BASALT pipeline in a single monolithic function.
+
+    Parameters match the modular entry points and support resuming from
+    checkpoints via ``Basalt_checkpoint.txt``.
+    """
     ### Record the last accomplished step
     pwd=os.getcwd()
 

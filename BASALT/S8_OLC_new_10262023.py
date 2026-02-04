@@ -1,6 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
-#coding=utf-8
+
+"""
+Step S8 (CheckM2 branch): OLC-based reassembly of selected bins.
+
+This module performs overlap-layout-consensus (OLC) reassembly of
+bins using selected contigs to improve continuity and assembly
+quality.
+"""
 
 from Bio import SeqIO
 from Bio.Seq import Seq

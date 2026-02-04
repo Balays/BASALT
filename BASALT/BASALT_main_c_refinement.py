@@ -1,8 +1,16 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
-#coding=utf-8
 
-import time, sys, os
+"""
+Refinement entry point for the BASALT pipeline (CheckM-based branch).
+
+This module performs dereplication, DL-based outlier removal, contig
+retrieval, and optional polishing to refine the quality of MAGs.
+"""
+
+import time
+import sys
+import os
 from Bio import SeqIO
 from S4_Multiple_Assembly_Comparitor_multiple_processes_bwt_checkm import *
 from S5_Outlier_remover_DL_checkm import *
@@ -12,8 +20,17 @@ from S7lr_finding_sr_contigs_basing_lr_and_polishing_checkm import *
 from glob import glob
 from Cleanup import *
 
-# def BASALT_main(assembly_list, datasets, num_threads, lr_list, ram, continue_mode, functional_module, autobinning_parameters, refinement_paramter, hybri_reassembly, max_ctn, min_cpn, pwd):
-def BASALT_main_c_refinement(assembly_list, datasets, num_threads, lr_list, hifi_list, hic_list, eb_list, ram, continue_mode, functional_module, sensitive, refinement_paramter, max_ctn, min_cpn, pwd, QC_software, output_folder):
+
+def BASALT_main_c_refinement(assembly_list, datasets, num_threads, lr_list, hifi_list,
+                             hic_list, eb_list, ram, continue_mode, functional_module,
+                             sensitive, refinement_paramter, max_ctn, min_cpn,
+                             pwd, QC_software, output_folder):
+    """
+    Run BASALT refinement workflows for an existing autobinning result.
+
+    The function reads and updates checkpoint files, allowing interrupted
+    refinement runs to be resumed.
+    """
     ### Record the last accomplished step
     pwd=os.getcwd()
 

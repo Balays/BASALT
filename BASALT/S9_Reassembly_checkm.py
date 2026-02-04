@@ -1,7 +1,16 @@
 #!/usr/bin/env python
+
+"""
+Step S9 (CheckM branch): Short-read-based reassembly of bins.
+
+CheckM-specific reassembly workflow using short-read data on
+CheckM-filtered binsets.
+"""
+
 from Bio import SeqIO
 import sys, os, threading, copy, math
 from multiprocessing import Pool
+
 
 def mod_bin(binset_folder):
     pwd=os.getcwd()

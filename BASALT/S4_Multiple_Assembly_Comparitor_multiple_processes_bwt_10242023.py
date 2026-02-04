@@ -1,5 +1,13 @@
 #!/usr/bin/env python
-# from symbol import except_clause
+
+"""
+Step S4 (CheckM2 branch): Multi-assembly comparison and dereplication.
+
+This module compares bins across multiple assemblies using coverage
+profiles and PE connections, performing initial dereplication between
+assemblies in a multiprocessing fashion.
+"""
+
 from Bio import SeqIO
 import sys, os, threading, copy
 from multiprocessing import Pool

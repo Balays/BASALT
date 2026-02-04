@@ -1,6 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
-#coding=utf-8
+
+"""
+Step S2 (CheckM2 branch): Bin abundance estimation and PE connections.
+
+This module computes coverage-based abundance information and paired-end
+connections across bins using multiprocessing, preparing inputs for
+downstream dereplication and comparison steps.
+"""
 
 from lib2to3.fixes import fix_buffer
 from Bio import SeqIO

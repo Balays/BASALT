@@ -1,6 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
-#coding=utf-8
+
+"""
+Step S6 (CheckM branch): Contig retrieval from PE-supported connections.
+
+CheckM-specific implementation of contig retrieval using PE links
+and coverage information.
+"""
 
 import pandas as pd
 # import seaborn as sns

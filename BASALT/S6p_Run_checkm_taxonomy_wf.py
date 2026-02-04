@@ -1,6 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
-#coding=utf-8
+
+"""
+Step S6p (CheckM): Run CheckM taxonomy workflow.
+
+This helper integrates CheckM taxonomy workflows with BASALT by
+driving CheckM on selected binsets and reading back the results.
+"""
 
 import pandas as pd
 # import seaborn as sns

@@ -1,4 +1,12 @@
 #!/usr/bin/env python
+
+"""
+Dataset utilities for BASALT deep learning components.
+
+This module defines dataset classes and helpers for reading feature
+matrices and labels used by the contamination detection models.
+"""
+
 import os.path
 import pickle
 from collections import Counter

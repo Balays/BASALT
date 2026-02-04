@@ -1,6 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
-#coding=utf-8
+
+"""
+Step S1: Autobinning and initial quality control for BASALT.
+
+This module converts read formats, prepares paired-end tracking
+information and runs multiple binners to generate initial binsets
+and PE-based contig connection files.
+"""
 
 from lib2to3.fixes import fix_buffer
 from Bio import SeqIO
@@ -9,7 +16,10 @@ from collections import Counter
 from multiprocessing import Pool
 import shutil
 
-def fq2fa_conversion(filename): ### Converting fq to fa
+def fq2fa_conversion(filename):
+    """
+    Convert a FASTQ file into a FASTA file using Biopython.
+    """
     start=time.time()
     wrerr = sys.stderr.write
     print('---')
@@ -31,7 +41,10 @@ def fq2fa_conversion(filename): ### Converting fq to fa
     wrerr("OK, Converting Finished in %3.2f secs\n" % (end-start))
     return disName+".fasta"
 
-def ModifyEnd_fa(filename, n): ### Adding end to fasta file    
+def ModifyEnd_fa(filename, n):
+    """
+    Add PE tracking suffix to FASTA record identifiers for later mapping.
+    """
     print('---')
     print('Adding end for PE-tracking of '+str(filename))
     print('--- pwd: ', os.getcwd())
@@ -48,7 +61,10 @@ def ModifyEnd_fa(filename, n): ### Adding end to fasta file
     print('-----------------------------')
     return 'PE_r'+str(n)+'_'+filename
 
-def ModifyEnd(filename, n): ### Adding end to fasta file    
+def ModifyEnd(filename, n):
+    """
+    Add PE tracking suffix to FASTQ record identifiers for later mapping.
+    """
     print('---')
     print('Adding end for PE-tracking of '+str(filename))
     print('--- pwd: ', os.getcwd())
@@ -72,6 +88,9 @@ def ModifyEnd(filename, n): ### Adding end to fasta file
     return 'PE_r'+str(n)+'_'+filename
 
 def PE_tracker(sam_file, output_name):
+    """
+    Parse a SAM file to infer paired-end contig connections.
+    """
     contig_pe, contig_pe_mock, n={}, {}, 0
     for line in open(sam_file,'r'):
         n+=1
@@ -118,6 +137,9 @@ def PE_tracker(sam_file, output_name):
     f.close()
 
 def cal_connections(connections):
+    """
+    Aggregate PE connection counts from multiple connection files.
+    """
     PEC={}
     for item in connections:
         f=open(item, 'r')

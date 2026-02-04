@@ -1,4 +1,12 @@
 #!/usr/bin/env python
+
+"""
+Step S7lr (CheckM branch): Long-read-based contig retrieval and polishing.
+
+CheckM-specific variant of the long-read polishing step that uses
+CheckM outputs together with long-read mappings.
+"""
+
 from ast import excepthandler
 # from imp import NullImporter
 from selectors import EpollSelector

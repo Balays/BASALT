@@ -11,36 +11,51 @@ from torch.nn import functional as F
 from tqdm import tqdm
 import numpy as np
 
-import os
 import requests
-from tqdm import tqdm
+
 
 def download_model(url, local_dir=None):
+    """
+    Download a model file from a remote URL into the BASALT weight directory.
+
+    If ``local_dir`` is not provided, the function will use the directory
+    specified by the ``BASALT_WEIGHT`` environment variable. The file is
+    downloaded with a progress bar and will not be downloaded again if it
+    already exists.
+    """
     if local_dir is None:
         user_dir = os.path.expanduser('~')
-        # local_dir = f"{user_dir}/.cache/BASALT"
-        BASALT_WEIGHT = os.environ.get("BASALT_WEIGHT")
-        local_dir = BASALT_WEIGHT
-    local_path = f"{local_dir}/{os.path.basename(url)}"  # 指定本地保存路径和文件名
+        # Default cache directory could be under the user home, but here
+        # we rely on an explicit BASALT_WEIGHT environment variable to
+        # avoid implicit side effects.
+        local_dir = os.environ.get("BASALT_WEIGHT")
+        if not local_dir:
+            raise EnvironmentError(
+                "BASALT_WEIGHT environment variable is not set. "
+                "Please configure a directory for BASALT model weights."
+            )
+    local_path = f"{local_dir}/{os.path.basename(url)}"
 
     if os.path.exists(local_path):
         print(f"File already exists in {local_path}.")
-    else:
-        os.makedirs(local_dir, exist_ok=True)
-        print(f"File will be saved in {local_path}.")
-        response = requests.get(url, stream=True)  # 向URL发送请求
-        total_size = int(response.headers.get('content-length', 0))  # 获取文件总大小
-        block_size = 1024  # 每次下载的块大小
-        progress_bar = tqdm(total=total_size, unit='iB', unit_scale=True)  # 创建进度条对象
+        return local_dir
 
-        with open(local_path, 'wb') as f:
-            for data in response.iter_content(block_size):
-                progress_bar.update(len(data))  # 更新进度条
-                f.write(data)  # 将下载的数据写入到本地文件中
+    os.makedirs(local_dir, exist_ok=True)
+    print(f"File will be saved in {local_path}.")
 
-        progress_bar.close()  # 关闭进度条
+    # Stream the file to disk with a progress bar to support large files.
+    response = requests.get(url, stream=True)
+    response.raise_for_status()
+    total_size = int(response.headers.get('content-length', 0))
+    block_size = 1024
+    progress_bar = tqdm(total=total_size, unit='iB', unit_scale=True)
 
+    with open(local_path, 'wb') as f:
+        for data in response.iter_content(block_size):
+            progress_bar.update(len(data))
+            f.write(data)
 
+    progress_bar.close()
     return local_dir
 
 def del_best_ckpt(log_dir):
@@ -57,6 +72,24 @@ def del_best_ckpt(log_dir):
 #         return t
 
 def norm(t, type='mmn'):
+    """
+    Normalize a NumPy array along columns using one of the supported strategies.
+
+    Parameters
+    ----------
+    t : np.ndarray
+        Input tensor/array to be normalized.
+    type : {'mmn', 'absmmn'}, optional
+        Normalization type. ``'mmn'`` performs min-max normalization;
+        ``'absmmn'`` performs min-max normalization on the absolute
+        deviation from the mean. Any other value will return the input
+        unchanged.
+
+    Returns
+    -------
+    np.ndarray
+        Normalized array.
+    """
     if type == 'mmn':
         return (t - np.min(t, axis=0)) / (np.max(t, axis=0) - np.min(t, axis=0) + 1e-8)
     elif type == 'absmmn':
@@ -67,6 +100,26 @@ def norm(t, type='mmn'):
 
 
 def get_log_dir(set='train', comment=''):
+    """
+    Create and return a unique log directory for the current run.
+
+    Parameters
+    ----------
+    set : str, optional
+        Tag for the run type, e.g. ``'train'`` or ``'val'``.
+    comment : str, optional
+        Additional string appended to the log directory name.
+
+    Returns
+    -------
+    str
+        Absolute path to the created log directory.
+
+    Raises
+    ------
+    FileExistsError
+        If a directory with the same name already exists.
+    """
     log_dir = os.path.join('runs', set, comment)
     if os.path.exists(log_dir):
         raise FileExistsError
@@ -75,6 +128,13 @@ def get_log_dir(set='train', comment=''):
 
 
 def train_one_epoch(model, optimizer, data_loader, device, epoch, weight, loss_fun):
+    """
+    Train the model for a single epoch.
+
+    This function iterates over the provided data loader, performs forward
+    and backward passes, and updates model parameters using the specified
+    optimizer and loss function.
+    """
     model.train()
     if loss_fun == 'ce':
         loss_function = torch.nn.CrossEntropyLoss(weight=torch.tensor([weight, 1-weight], dtype=torch.float).to(device))
@@ -109,6 +169,12 @@ def train_one_epoch(model, optimizer, data_loader, device, epoch, weight, loss_f
 
 @torch.no_grad()
 def evaluate(model, data_loader, device, epoch, weight, loss_fun):
+    """
+    Evaluate the model on a validation set.
+
+    Returns per-class accuracies for class 0 and class 1 to better capture
+    performance on imbalanced datasets.
+    """
     model.eval()
 
     if loss_fun == 'ce':
@@ -148,6 +214,9 @@ def evaluate(model, data_loader, device, epoch, weight, loss_fun):
     return acc_0, acc_1
 
 def save_confusion_mat(log_dir, matrix, classes=None, title=None):
+    """
+    Plot and save a confusion matrix figure to the given log directory.
+    """
     plt.figure()
     disp = ConfusionMatrixDisplay(confusion_matrix=matrix, display_labels=classes)
     disp.plot()
@@ -159,6 +228,12 @@ def save_confusion_mat(log_dir, matrix, classes=None, title=None):
 
 @torch.no_grad()
 def evaluate_ensemble(model, data_loader, device):
+    """
+    Evaluate an ensemble model and return the predicted labels.
+
+    This helper assumes that labels are not required and only predictions
+    are needed downstream (e.g. for voting or thresholding).
+    """
     model.eval()
 
 
@@ -195,6 +270,13 @@ def evaluate_ensemble(model, data_loader, device):
 
 
 class focal_loss(nn.Module):
+    """
+    Focal loss for binary or multi-class classification.
+
+    This loss is designed to address class imbalance by down-weighting
+    well-classified examples and focusing training on hard examples.
+    """
+
     def __init__(self, alpha=0.25, gamma=2, num_classes=3, size_average=True):
         super(focal_loss, self).__init__()
         self.size_average = size_average
@@ -210,16 +292,21 @@ class focal_loss(nn.Module):
         self.gamma = gamma
 
     def forward(self, preds, labels):
+        """
+        Compute focal loss given predictions and ground-truth labels.
+        """
         preds = preds.view(-1, preds.size(-1))
         self.alpha = self.alpha.to(preds.device)
         preds_logsoft = F.log_softmax(preds, dim=1)  # log_softmax
         preds_softmax = torch.exp(preds_logsoft)  # softmax
 
-        preds_softmax = preds_softmax.gather(1, labels.view(-1, 1))  # 这部分实现nll_loss ( crossempty = log_softmax + nll )
+        # Implement NLL loss by gathering the probabilities of the true class
+        preds_softmax = preds_softmax.gather(1, labels.view(-1, 1))
         preds_logsoft = preds_logsoft.gather(1, labels.view(-1, 1))
         self.alpha = self.alpha.gather(0, labels.view(-1))
-        loss = -torch.mul(torch.pow((1 - preds_softmax), self.gamma),
-                          preds_logsoft)  # torch.pow((1-preds_softmax), self.gamma) 为focal loss中 (1-pt)**γ
+
+        # (1 - p_t) ** gamma term from focal loss
+        loss = -torch.mul(torch.pow((1 - preds_softmax), self.gamma), preds_logsoft)
 
         loss = torch.mul(self.alpha, loss.t())
         if self.size_average:

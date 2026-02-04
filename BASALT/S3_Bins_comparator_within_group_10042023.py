@@ -1,6 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
-#coding=utf-8
+
+"""
+Step S3 (CheckM2 branch): Within-group bin comparison and selection.
+
+This module compares bins from the same assembly group based on
+coverage and PE connections, and selects the best representative
+bins for each group.
+"""
 
 from tempfile import TemporaryFile
 from Bio import SeqIO

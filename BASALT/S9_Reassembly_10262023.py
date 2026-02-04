@@ -1,7 +1,16 @@
 #!/usr/bin/env python
+
+"""
+Step S9 (CheckM2 branch): Short-read-based reassembly of bins.
+
+This module performs reassembly of bins using short-read data to
+improve contig structure after previous refinement steps.
+"""
+
 from Bio import SeqIO
 import sys, os, threading, copy, math
 from multiprocessing import Pool
+
 
 def mod_bin(binset_folder):
     pwd=os.getcwd()

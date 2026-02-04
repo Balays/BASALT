@@ -1,6 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
-#coding=utf-8
+
+"""
+Step S1e: Integration of extra binners for BASALT.
+
+This module provides wrappers around external binning tools such as
+Metabinner and VAMB, and harmonises their outputs into BASALT's
+internal binset representation.
+"""
 
 from lib2to3.fixes import fix_buffer
 from Bio import SeqIO

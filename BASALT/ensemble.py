@@ -1,4 +1,13 @@
 #!/usr/bin/env python
+
+"""
+Inference-time ensemble for BASALT DL contamination classifiers.
+
+This script loads multiple trained MLP checkpoints, performs ensemble
+prediction on the test dataset, and writes the predicted labels to
+an output file. It is used internally during BASALT outlier removal.
+"""
+
 import math
 import argparse
 import os
