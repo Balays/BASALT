@@ -474,9 +474,9 @@ Z Qiu, L Yuan, C Lian, B Lin, J Chen, R Mu, X Qiao, L Zhang, Z Xu, L Fan, Y Zhan
 
 ## 📖 References
 
-> 1. Uritskiy, G.V., DiRuggiero, J. & Taylor, J. MetaWRAP—a flexible pipeline for genome-resolved metagenomic data analysis. Microbiome 6, 1-13 (2018).
+> 1. Qiu, Z. et al. BASALT refines binning from metagenomic data and increases resolution of genome-resolved metagenomic analysis. Nature Communications 15, 2179 (2024).
 > 2. Sieber, C.M. et al. Recovery of genomes from metagenomes via a dereplication, aggregation and scoring strategy. Nature microbiology 3, 836-843 (2018).
-> 3. Olm, M.R., Brown, C.T., Brooks, B. & Banfield, J.F. dRep: a tool for fast and accurate genomic comparisons that enables improved genome recovery from metagenomes through de-replication. The ISME journal 11, 2864-2868 (2017).
-> 4. Qiu, Z. et al. BASALT refines binning from metagenomic data and increases resolution of genome-resolved metagenomic analysis. Nature Communications 15, 2179 (2024).
+> 3. Uritskiy, G.V., DiRuggiero, J. & Taylor, J. MetaWRAP—a flexible pipeline for genome-resolved metagenomic data analysis. Microbiome 6, 1-13 (2018).
+> 4. Olm, M.R., Brown, C.T., Brooks, B. & Banfield, J.F. dRep: a tool for fast and accurate genomic comparisons that enables improved genome recovery from metagenomes through de-replication. The ISME journal 11, 2864-2868 (2017).
 > 5. Xue, W., Liu, Z., Zhang, Y. et al. LorBin: efficient binning of long-read metagenomes by multiscale adaptive clustering and evaluation. Nat Commun 16, 9353 (2025). 
 
