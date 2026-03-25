@@ -28,7 +28,7 @@ from model import MLP
 import torch.optim.lr_scheduler as lr_scheduler
 from os.path import join
 from my_dataset import MyDataSet_test
-from utils import train_one_epoch, evaluate_ensemble, get_log_dir, del_best_ckpt, save_confusion_mat, download_model
+from utils import train_one_epoch, evaluate_ensemble, get_log_dir, del_best_ckpt, save_confusion_mat, download_model, resolve_weight_dir
 
 
 def main(args):
@@ -51,9 +51,7 @@ def main(args):
     ensemble_dict = {5: '5_92_76_ensemble', 4: '4_90_71_ensemble', 3: '3_89_70_ensemble',
                      2: '2_89_70_ensemble', 1: '1_89_69_ensemble'}
     if not args.ckpt_dir:
-        # args.ckpt_dir = f"{os.path.expanduser('~')}/.cache/BASALT"
-        BASALT_WEIGHT = os.environ.get("BASALT_WEIGHT")
-        args.ckpt_dir = BASALT_WEIGHT
+        args.ckpt_dir = resolve_weight_dir()
     try:
         ckpts = np.loadtxt(join(args.ckpt_dir, ensemble_dict[dataset.n_col]+'.csv'), dtype=str)
     except Exception as e:

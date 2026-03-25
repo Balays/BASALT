@@ -22,6 +22,17 @@ import numpy as np
 
 import requests
 
+def resolve_weight_dir(local_dir=None):
+    if local_dir:
+        return local_dir
+
+    env_dir = os.environ.get("BASALT_WEIGHT")
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    repo_weight_dir = os.path.join(script_dir, "BASALT")
+    cache_weight_dir = os.path.join(os.path.expanduser("~"), ".cache", "BASALT")
+
+    return env_dir or repo_weight_dir or cache_weight_dir
+
 
 def download_model(url, local_dir=None):
     """
@@ -32,17 +43,7 @@ def download_model(url, local_dir=None):
     downloaded with a progress bar and will not be downloaded again if it
     already exists.
     """
-    if local_dir is None:
-        user_dir = os.path.expanduser('~')
-        # Default cache directory could be under the user home, but here
-        # we rely on an explicit BASALT_WEIGHT environment variable to
-        # avoid implicit side effects.
-        local_dir = os.environ.get("BASALT_WEIGHT")
-        if not local_dir:
-            raise EnvironmentError(
-                "BASALT_WEIGHT environment variable is not set. "
-                "Please configure a directory for BASALT model weights."
-            )
+    local_dir = resolve_weight_dir(local_dir)
     local_path = f"{local_dir}/{os.path.basename(url)}"
 
     if os.path.exists(local_path):

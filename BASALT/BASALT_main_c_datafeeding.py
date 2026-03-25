@@ -20,6 +20,17 @@ from S5_Outlier_remover_DL_checkm import *
 from glob import glob
 from Cleanup import *
 
+def _resolve_basalt_weight_dir():
+    env_dir = os.environ.get("BASALT_WEIGHT")
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    repo_weight_dir = os.path.join(script_dir, "BASALT")
+    cache_weight_dir = os.path.join(os.path.expanduser("~"), ".cache", "BASALT")
+
+    for candidate in (env_dir, repo_weight_dir, cache_weight_dir):
+        if candidate:
+            return candidate
+    return repo_weight_dir
+
 
 def data_feeding_main(assembly_list, datasets, num_threads, data_feeding_folder,
                       pwd, QC_software, output_folder, binsetindex, continue_mode):
@@ -48,10 +59,8 @@ def data_feeding_main(assembly_list, datasets, num_threads, data_feeding_folder,
         Either ``'last'`` to resume or ``'new'`` to start from scratch.
     """
     #### Check existence of models
-    user_dir = os.path.expanduser('~')
-    # local_dir = f"{user_dir}/.cache/BASALT"
-    BASALT_WEIGHT = os.environ.get("BASALT_WEIGHT")
-    local_dir = BASALT_WEIGHT
+    local_dir = _resolve_basalt_weight_dir()
+    os.makedirs(local_dir, exist_ok=True)
     os.chdir(local_dir)
     model_list=glob(r'*_ensemble.csv')
     os.chdir(pwd)
@@ -60,8 +69,8 @@ def data_feeding_main(assembly_list, datasets, num_threads, data_feeding_folder,
         x=0
     else:
         print('BASALT models lacking. Start download the model')
-        # os.system('python BASALT_models_download.py')
-        os.system('BASALT_models_download.py')
+        download_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'BASALT_models_download.py')
+        os.system(f'"{sys.executable}" "{download_script}"')
 
     #### Program start
     last_step=0

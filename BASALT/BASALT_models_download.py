@@ -11,6 +11,17 @@ import os
 import requests
 from tqdm import tqdm
 
+def resolve_weight_dir(local_dir=None):
+    if local_dir:
+        return local_dir
+
+    env_dir = os.environ.get("BASALT_WEIGHT")
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    repo_weight_dir = os.path.join(script_dir, "BASALT")
+    cache_weight_dir = os.path.join(os.path.expanduser("~"), ".cache", "BASALT")
+
+    return env_dir or repo_weight_dir or cache_weight_dir
+
 
 def download_model(local_dir=None):
     """
@@ -19,13 +30,7 @@ def download_model(local_dir=None):
     If ``local_dir`` is not provided, the directory pointed to by the
     BASALT_WEIGHT environment variable is used.
     """
-    if local_dir is None:
-        local_dir = os.environ.get("BASALT_WEIGHT")
-        if not local_dir:
-            raise EnvironmentError(
-                "BASALT_WEIGHT environment variable is not set. "
-                "Please configure a directory for BASALT model weights."
-            )
+    local_dir = resolve_weight_dir(local_dir)
 
     # Public URL hosting BASALT model weights
     url = "https://figshare.com/ndownloader/files/41093033"
@@ -59,12 +64,7 @@ def main():
     Download and unzip BASALT model weights into BASALT_WEIGHT.
     """
     zip_path = download_model()
-    destination_folder = os.environ.get("BASALT_WEIGHT")
-    if not destination_folder:
-        raise EnvironmentError(
-            "BASALT_WEIGHT environment variable is not set. "
-            "Please configure a directory for BASALT model weights."
-        )
+    destination_folder = resolve_weight_dir()
 
     exit_code = os.system(f"unzip -o {zip_path} -d {destination_folder}")
 
