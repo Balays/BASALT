@@ -23,6 +23,19 @@ def resolve_weight_dir(local_dir=None):
     return env_dir or repo_weight_dir or cache_weight_dir
 
 
+def models_already_extracted(destination_folder):
+    candidate_dirs = [destination_folder, os.path.join(destination_folder, "BASALT")]
+    for candidate in candidate_dirs:
+        if not os.path.isdir(candidate):
+            continue
+        csv_count = len(
+            [name for name in os.listdir(candidate) if name.endswith("_ensemble.csv")]
+        )
+        if csv_count >= 5:
+            return True
+    return False
+
+
 def download_model(local_dir=None):
     """
     Download the BASALT model archive into the given directory.
@@ -65,6 +78,9 @@ def main():
     """
     zip_path = download_model()
     destination_folder = resolve_weight_dir()
+    if models_already_extracted(destination_folder):
+        print(f"BASALT models already available under {destination_folder}.")
+        return
 
     exit_code = os.system(f"unzip -o {zip_path} -d {destination_folder}")
 

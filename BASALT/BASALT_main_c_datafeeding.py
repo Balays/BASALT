@@ -25,10 +25,13 @@ def _resolve_basalt_weight_dir():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_weight_dir = os.path.join(script_dir, "BASALT")
     cache_weight_dir = os.path.join(os.path.expanduser("~"), ".cache", "BASALT")
-
     for candidate in (env_dir, repo_weight_dir, cache_weight_dir):
-        if candidate:
-            return candidate
+        if not candidate:
+            continue
+        nested_candidate = os.path.join(candidate, "BASALT")
+        if os.path.isdir(nested_candidate):
+            return nested_candidate
+        return candidate
     return repo_weight_dir
 
 

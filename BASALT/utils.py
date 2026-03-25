@@ -31,7 +31,14 @@ def resolve_weight_dir(local_dir=None):
     repo_weight_dir = os.path.join(script_dir, "BASALT")
     cache_weight_dir = os.path.join(os.path.expanduser("~"), ".cache", "BASALT")
 
-    return env_dir or repo_weight_dir or cache_weight_dir
+    for candidate in (env_dir, repo_weight_dir, cache_weight_dir):
+        if not candidate:
+            continue
+        nested_candidate = os.path.join(candidate, "BASALT")
+        if os.path.isdir(nested_candidate):
+            return nested_candidate
+        return candidate
+    return repo_weight_dir
 
 
 def download_model(url, local_dir=None):

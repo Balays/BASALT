@@ -1530,16 +1530,18 @@ def autobinner_main(assembly_list, datasets, lr, hifi_list, insert_size, num_thr
             # datasets_fq[item].append(str(datasets[item][1]))
 
     for item in range(0, len(assembly_list)):
-        mo_assembly=str(int(item)+1)+'_'+str(assembly_list[item])
+        assembly_path = str(assembly_list[item])
+        assembly_label = os.path.basename(assembly_path)
+        mo_assembly=str(int(item)+1)+'_'+assembly_label
         mo_assembly_depth=str(int(item)+1)+'_assembly.depth.txt'
         if str(item) not in ab_acc_asb.keys():
             PEC={}
             group=int(item)+1
-            assembly=str(assembly_list[item])
+            assembly=assembly_label
             f_filtrated=open(str(group)+'_'+assembly, 'w')
             print('Filtration of the contigs/scaffolds. The process keeps Contig/scaffold with larger than 1000 bp.')
             n=0
-            for record in SeqIO.parse(assembly,'fasta'):
+            for record in SeqIO.parse(assembly_path,'fasta'):
                 if len(record.seq) >= 1000:
                     n+=1
                     f_filtrated.write('>'+str(group)+'-'+str(n)+'\n'+str(record.seq)+'\n')
@@ -1557,7 +1559,7 @@ def autobinner_main(assembly_list, datasets, lr, hifi_list, insert_size, num_thr
                     tok=1
 
                     print('-------------')
-                    bam_sorted1=mapping(str(assembly_list[item]), int(item)+1, datasets_fq, num_threads, pwd)
+                    bam_sorted1=mapping(assembly, int(item)+1, datasets_fq, num_threads, pwd)
                     # bam_sorted1='1_DNA-1_sorted.bam'
 
                 connections=[]
@@ -1566,7 +1568,7 @@ def autobinner_main(assembly_list, datasets, lr, hifi_list, insert_size, num_thr
 
                 PEC=cal_connections(connections)
 
-                connections_total=open('condense_connections_'+str(assembly_list[item])+'.txt', 'w')
+                connections_total=open('condense_connections_'+assembly+'.txt', 'w')
                 connections_total.write('node1'+'\t'+'interaction'+'\t'+'node2'+'\t'+'connections'+'\n')
                 for item2 in PEC.keys():
                     connections_total.write(str(item2)+'\t'+str(PEC[item2])+'\n')
@@ -1733,7 +1735,7 @@ def autobinner_main(assembly_list, datasets, lr, hifi_list, insert_size, num_thr
             # os.system('rm Coverage_list_*')
             # bam_sorted = 
             ### metabat / maxbin2 / concoct 
-            Coverage_list_file='Coverage_list_'+str(int(item)+1)+'_'+str(assembly_list[item])+'.txt'
+            Coverage_list_file='Coverage_list_'+str(int(item)+1)+'_'+assembly+'.txt'
             bins_folders[str(assembly_list[item])] = autobinners(
                 'all',
                 mo_assembly,
@@ -1851,7 +1853,7 @@ def autobinner_main(assembly_list, datasets, lr, hifi_list, insert_size, num_thr
             fb=open('Basalt_log.txt','a')
             fb.write('ABA: '+str(item)+'\n') #EMA: end modification accomplished
             fb.close()
-        connections_total_dict[str(assembly_list[item])]='condense_connections_'+str(assembly_list[item])+'.txt'
+        connections_total_dict[str(assembly_list[item])]='condense_connections_'+assembly_label+'.txt'
         depth_total[str(assembly_list[item])]=mo_assembly_depth
         assembly_MoDict[str(assembly_list[item])]=mo_assembly
 
