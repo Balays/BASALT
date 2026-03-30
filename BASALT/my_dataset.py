@@ -170,10 +170,11 @@ class MyDataSet_test(Dataset):
         datas = []
         lines = read_raw_data(split)
         self.lines = lines
+        temp_datas = []
         for i, line in tqdm(enumerate(lines)):
             l = line.split('\t')
             if len(l) == 1:
-                if i != 0:
+                if i != 0 and temp_datas:
                     datas.append(norm(np.vstack(temp_datas), type))
                 genes.append(l[0].strip())
                 temp_labels, temp_datas = [], []
@@ -187,7 +188,14 @@ class MyDataSet_test(Dataset):
                 if use_256:
                     data += list(eval(l[4]))
                 temp_datas.append(data)
-        datas.append(norm(np.vstack(temp_datas), type))
+        if temp_datas:
+            datas.append(norm(np.vstack(temp_datas), type))
+
+        if not datas:
+            raise ValueError(
+                f"No feature rows found for split '{split}'. "
+                "The BASALT outlier test matrix is empty."
+            )
 
         self.datas = np.vstack(datas)
         if self.n_col > 5:

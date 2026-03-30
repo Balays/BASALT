@@ -45,6 +45,21 @@ def _resolve_basalt_weight_dir():
     return repo_weight_dir
 
 
+def _resolve_connections_file(assembly_name):
+    normalized_item = os.path.basename(str(assembly_name).strip())
+    candidates = [f'condense_connections_{normalized_item}.txt']
+
+    if '_' in normalized_item:
+        suffix = normalized_item.split('_', 1)[1]
+        candidates.append(f'condense_connections_{suffix}.txt')
+
+    for candidate in candidates:
+        if os.path.exists(candidate):
+            return candidate
+
+    return candidates[0]
+
+
 def BASALT_main_d(assembly_list, datasets, num_threads, lr_list, hifi_list,
                   hic_list, eb_list, ram, continue_mode, functional_module,
                   sensitive, refinement_paramter, max_ctn, min_cpn,
@@ -458,7 +473,8 @@ def BASALT_main_d(assembly_list, datasets, num_threads, lr_list, hifi_list,
                 f_cp_m.write('\n'+'3rd bin selection within multiple groups done!')
                 f_cp_m.close()
             else:
-                os.system('cp -r '+str(assembly_list[0])+'_comparison_files BestBinset_comparison_files')
+                comparison_folder = str(assembly_mo_list[0]) + '_comparison_files'
+                os.system('cp -r '+comparison_folder+' BestBinset_comparison_files')
                 f_cp_m=open('Basalt_checkpoint.txt', 'a')
                 f_cp_m.write('\n'+'3rd bin selection did not perform, because there is only one assembly!')
                 f_cp_m.close()
@@ -474,8 +490,8 @@ def BASALT_main_d(assembly_list, datasets, num_threads, lr_list, hifi_list,
             for line in open('Bestbinset_list.txt','r'):
                 bestbinset_list.append(str(line).strip())
             
-            for item in assembly_list:
-                connections_list.append('condense_connections_'+item+'.txt')
+            for item in assembly_mo_list:
+                connections_list.append(_resolve_connections_file(item))
             if len(bestbinset_list) == 1:
                 print('Copying '+str(bestbinset_list[0])+' to BestBinset')
                 os.system('cp -r '+str(bestbinset_list[0])+' BestBinset')
@@ -501,8 +517,9 @@ def BASALT_main_d(assembly_list, datasets, num_threads, lr_list, hifi_list,
             for line in open('Assembly_mo_list.txt','r'):
                 assembly_mo_list.append(str(line).strip())
             for line in open('Assembly_MoDict.txt','r'):
-                item=str(line).strip().split('\t')[0].strip()
-                connections_list.append('condense_connections_'+item+'.txt')
+                parts = str(line).strip().split('\t')
+                item = parts[-1].strip()
+                connections_list.append(_resolve_connections_file(item))
 
             xxx=0
             try:
@@ -604,8 +621,9 @@ def BASALT_main_d(assembly_list, datasets, num_threads, lr_list, hifi_list,
                 for line in open('Assembly_mo_list.txt','r'):
                     assembly_mo_list.append(str(line).strip())
                 for line in open('Assembly_MoDict.txt','r'):
-                    item=str(line).strip().split('\t')[0].strip()
-                    connections_list.append('condense_connections_'+item+'.txt')
+                    parts = str(line).strip().split('\t')
+                    item = parts[-1].strip()
+                    connections_list.append(_resolve_connections_file(item))
 
                 # Contig_retrieve_within_group_main(best_binset_after_contig_retrieve, outlier_remover_folder, num_threads, continue_mode, cpn_cutoff, ctn_cutoff, assembly_mo_list, connections_list, coverage_matrix_list)
 
@@ -626,8 +644,9 @@ def BASALT_main_d(assembly_list, datasets, num_threads, lr_list, hifi_list,
                 for line in open('Assembly_mo_list.txt','r'):
                     assembly_mo_list.append(str(line).strip())
                 for line in open('Assembly_MoDict.txt','r'):
-                    item=str(line).strip().split('\t')[0].strip()
-                    connections_list.append('condense_connections_'+item+'.txt')
+                    parts = str(line).strip().split('\t')
+                    item = parts[-1].strip()
+                    connections_list.append(_resolve_connections_file(item))
 
                 # Contig_retrieve_within_group_main(best_binset_after_contig_retrieve, outlier_remover_folder, num_threads, continue_mode, cpn_cutoff, ctn_cutoff, assembly_mo_list, connections_list, coverage_matrix_list)
 
