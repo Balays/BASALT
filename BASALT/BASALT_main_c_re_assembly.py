@@ -12,6 +12,7 @@ import time
 import sys
 import os
 from Bio import SeqIO
+from parallel_utils import prepare_paired_datasets, prepare_sequence_files
 from S4_Multiple_Assembly_Comparitor_multiple_processes_bwt_checkm import *
 from S8_OLC_new_checkm import *
 from S9_Reassembly_checkm import *
@@ -169,56 +170,7 @@ def BASALT_main_c_re_assembly(assembly_list, datasets, num_threads, lr_list, hif
             fx.close()
 
     if x > 1:
-        datasets={}
-        for item in datasets2.keys():
-            datasets[item]=[]
-            if x == 2:
-                f1_d=str(datasets2[item][0]).split('.zip')[0]
-                f2_d=str(datasets2[item][1]).split('.zip')[0]
-                if os.path.exists(pwd+'/PE_r1_'+str(f1_d)):
-                    z=0
-                else:
-                    os.system('unzip '+str(datasets2[item][0]))
-
-                if os.path.exists(pwd+'/PE_r2_'+str(f2_d)):
-                    z=0
-                else:
-                    os.system('unzip '+str(datasets2[item][1]))
-
-            elif x == 3:
-                f1=str(datasets2[item][0])
-                f2=str(datasets2[item][1])
-                f1_d=str(f1).split('.tar.gz')[0]
-                f2_d=str(f2).split('.tar.gz')[0]
-                if os.path.exists(pwd+'/PE_r1_'+str(f1_d)):
-                    z=0
-                else:
-                    os.system('tar -zxf '+str(f1))
-                if os.path.exists(pwd+'/PE_r2_'+str(f2_d)):
-                    z=0
-                else:
-                    os.system('tar -zxf '+str(f2))
-
-            elif x == 4:
-                f1=str(datasets2[item][0])
-                f2=str(datasets2[item][1])
-                f1_d=f1.split('.gz')[0]
-                f2_d=f2.split('.gz')[0]
-                if os.path.exists(pwd+'/PE_r1_'+str(f1_d)):
-                    z=0
-                else:
-                    os.system('gunzip -c '+f1+' > '+f1_d)
-                if os.path.exists(pwd+'/PE_r2_'+str(f2_d)):
-                    z=0
-                else:                    
-                    os.system('gunzip -c '+f2+' > '+f2_d)
-
-            if '.fq' not in f1_d and '.fastq' not in f1_d:
-                f1_d=f1_d+'.fq'
-            if '.fq' not in f2_d and '.fastq' not in f2_d:
-                f2_d=f2_d+'.fq'
-            datasets[item].append(f1_d)
-            datasets[item].append(f2_d)
+        datasets = prepare_paired_datasets(datasets2, pwd, num_threads)
 
     x=0
     assembly_list2=copy.deepcopy(assembly_list)
@@ -243,32 +195,7 @@ def BASALT_main_c_re_assembly(assembly_list, datasets, num_threads, lr_list, hif
             fx.close()
     
     if x > 1:
-        assembly_list=[]
-        for item in assembly_list2:
-            if x == 2:
-                f_d=str(item).split('.zip')[0]
-                if os.path.exists(pwd+'/'+str(f_d)):
-                    z=0
-                else:   
-                    os.system('unzip '+str(item))
-            
-            elif x == 3:
-                f_d=str(item).split('.tar.gz')[0]
-                if os.path.exists(pwd+'/'+str(f_d)):
-                    z=0
-                else:
-                    os.system('tar -zxf '+str(item))
-
-            elif x == 4:
-                f_d=str(item).split('.gz')[0]
-                if os.path.exists(pwd+'/'+str(f_d)):
-                    z=0
-                else:
-                    os.system('gunzip -c '+str(item)+' > '+str(f_d))
-
-            if '.fa' not in f_d and '.fna' not in f_d and '.fasta' not in f_d:
-                f_d=f_d+'.fa'
-            assembly_list.append(f_d)
+        assembly_list = prepare_sequence_files(assembly_list2, pwd, num_threads, '.fa')
 
     ### Reassembly module
     if functional_module == 'reassembly' or functional_module == 'all':
@@ -364,32 +291,7 @@ def BASALT_main_c_re_assembly(assembly_list, datasets, num_threads, lr_list, hif
                         print('BASALT supports the input (1) sequence files in  .gz, .zip, and .tar.gz; (2) and assemlies in .fa, .fna, .fasta.')
                 
                 if x > 1:
-                    lr_list=[]
-                    for item in lr_list2:
-                        if x == 2:
-                            f_d=str(item).split('.zip')[0]
-                            if os.path.exists(pwd+'/'+str(f_d)):
-                                z=0
-                            else:   
-                                os.system('unzip '+str(item))
-                        
-                        elif x == 3:
-                            f_d=str(item).split('.tar.gz')[0]
-                            if os.path.exists(pwd+'/'+str(f_d)):
-                                z=0
-                            else:
-                                os.system('tar -zxf '+str(item))
-
-                        elif x == 4:
-                            f_d=str(item).split('.gz')[0]
-                            if os.path.exists(pwd+'/'+str(f_d)):
-                                z=0
-                            else:
-                                os.system('gunzip -c '+str(item)+' > '+str(f_d))
-                        
-                        if '.fq' not in f_d and '.fastq' not in f_d:
-                            f_d=f_d+'.fq'
-                        lr_list.append(f_d)
+                    lr_list = prepare_sequence_files(lr_list2, pwd, num_threads, '.fq')
                 polished_binset=binset_folder
                 sr_folder='BestBinset_sr_bins_seq'
                 lr_folder='BestBinset_long_read'
