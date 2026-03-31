@@ -139,66 +139,60 @@ def parse_sam(sam_file, fq, pair, n):
         Writes bin-specific paired-end FASTQ files and a summary file
         ``Bin_reads_summary.txt`` in the working directory.
     """
-    print('Reading reads id')
-    f_not_mapped_reads=open('Not_mapped_reads.txt','a')
-    m, m1, m2 = 0, 0, 0
-    for line in open(sam_file,'r'):
-        m1+=1
-        flist=str(line).split('\t')
-        if len(flist) >= 12:
-            bin_id=flist[2].split('_')[0]
-            read_id=flist[0]
-            read_id_name=str(n)+'_'+read_id.split('_')[0]
-            pair[bin_id][read_id_name]=0
-        if m1 % 1000000 == 0:
-            print('Read', m1,'lines')
-
-    print('Collecting paired reads')
-    for line in open(sam_file,'r'):
-        m2+=1
-        flist=str(line).split('\t')
-        if len(flist) >= 12:
-            bin_id=flist[2].split('_')[0]
-            read_id=flist[0]
-            read_id_name=str(n)+'_'+read_id.split('_')[0]
-            pair[bin_id][read_id_name]+=1
-
-            if pair[bin_id][read_id_name] == 2:
-                fq[bin_id][read_id_name]=0
-                del pair[bin_id][read_id_name]
-
-        if m2 % 1000000 == 0:
-            print('Read', m2,'lines')
-
-    f_summary=open('Bin_reads_summary.txt','w')
-    for item in fq.keys():
-        f_summary.write(str(item)+' SEQ number:'+str(len(fq[item]))+'\n')
-    f_summary.close()
-
     print('Parsing', sam_file)
+    pending = {}
+    pair_counts = {}
+    writers = {}
+    f_not_mapped_reads=open('Not_mapped_reads.txt','a')
+
+    def get_writer(bin_id, read_num):
+        key = (bin_id, read_num)
+        if key not in writers:
+            writers[key] = open(str(bin_id)+'_seq_R'+str(read_num)+'.fq','a')
+        return writers[key]
+
+    m = 0
     for line in open(sam_file,'r'):
         m+=1
         flist=str(line).split('\t')
         if len(flist) >= 12:
             bin_id=flist[2].split('_')[0]
             read_id=flist[0]
-            reads=str(n)+'_'+read_id #
-            read_num=reads.split('_')[-1] #
-            read_id_name=str(n)+'_'+read_id.split('_')[0] #
-            fq_seq=flist[9]+'\n'+'+'+'\n'+flist[10]+'\n'
+            read_id_name=str(n)+'_'+read_id.split('_')[0]
+            reads=str(n)+'_'+read_id
+            read_num=reads.split('_')[-1]
+            fq_seq=flist[9]+'\n+\n'+flist[10]+'\n'
+            read_record='@'+str(reads)[:-2]+' '+str(read_num)+'\n'+str(fq_seq)
+
             try:
-                fq[bin_id][read_id_name]+=1
-                f1=open(str(bin_id)+'_seq_R'+str(read_num)+'.fq','a')
-                f1.write('@'+str(reads)[:-2]+' '+str(read_num)+'\n'+str(fq_seq))
-                f1.close()
-                if fq[bin_id][read_id_name] == 2:
-                    del fq[bin_id][read_id_name]
+                pair.setdefault(bin_id, {})
+                fq.setdefault(bin_id, {})
+                pending.setdefault(bin_id, {})
+                pair_counts.setdefault(bin_id, 0)
+
+                bucket = pending[bin_id].setdefault(read_id_name, {})
+                if read_num not in bucket:
+                    bucket[read_num] = read_record
+
+                if '1' in bucket and '2' in bucket:
+                    get_writer(bin_id, '1').write(bucket['1'])
+                    get_writer(bin_id, '2').write(bucket['2'])
+                    pair_counts[bin_id] += 1
+                    del pending[bin_id][read_id_name]
             except:
                 f_not_mapped_reads.write(str(read_id_name)+'\n')
-    
+
         if m % 1000000 == 0:
             print('Parsed', m,'lines')
+
+    for handle in writers.values():
+        handle.close()
     f_not_mapped_reads.close()
+
+    f_summary=open('Bin_reads_summary.txt','w')
+    for item in pair_counts.keys():
+        f_summary.write(str(item)+' SEQ number:'+str(pair_counts[item])+'\n')
+    f_summary.close()
 
 
 def parse_lr_sam(sam_file, long_read, sn):
@@ -409,53 +403,86 @@ def reassembly(bin_seq, reassembly_bin_folder, num_threads, bins_seq_folder,
     None
         Writes reassembled contig FASTA files into ``reassembly_bin_folder``.
     """
-    for item in bin_seq.keys():
-        os.system('spades.py -1 '+str(bin_seq[item][0])+' -2 '+str(bin_seq[item][1])+' -o '+str(item)+'_spades_reassembly --careful -t '+str(num_threads)+' -m '+str(ram))
-        os.chdir(str(pwd)+'/'+str(item)+'_spades_reassembly')
-        xxxx=0
+    def _reassembly_worker(item, reads, threads_per_job, ram_per_job, out_folder, seq_folder, cwd):
+        r1, r2 = reads
+        spades_dir = str(item) + '_spades_reassembly'
+        idba_dir = str(item) + '_idba_reassembly'
+        idba_fa = str(item) + '_idba.fa'
+
+        os.system('spades.py -1 '+str(r1)+' -2 '+str(r2)+' -o '+spades_dir+' --careful -t '+str(threads_per_job)+' -m '+str(ram_per_job))
+        os.chdir(str(cwd)+'/'+spades_dir)
+        kept_contigs = 0
         if os.path.isfile("contigs.fasta") == True:
             f=open(str(item)+'_SPAdes_re-assembly_contigs.fa','w')
             for record in SeqIO.parse('contigs.fasta', 'fasta'):
                 if len(record.seq) >= 1000:
-                    xxxx+=1
+                    kept_contigs+=1
                     f.write('>'+str(record.id)+'\n'+str(record.seq)+'\n')
             f.close()
         else:
-            os.chdir(str(pwd))
-            os.system('spades.py -1 '+str(bin_seq[item][0])+' -2 '+str(bin_seq[item][1])+' -o '+str(item)+'_spades_reassembly -t '+str(num_threads)+' -m '+str(ram))
-            os.chdir(str(pwd)+'/'+str(item)+'_spades_reassembly')
+            os.chdir(str(cwd))
+            os.system('spades.py -1 '+str(r1)+' -2 '+str(r2)+' -o '+spades_dir+' -t '+str(threads_per_job)+' -m '+str(ram_per_job))
+            os.chdir(str(cwd)+'/'+spades_dir)
             if os.path.isfile("contigs.fasta") == True:
                 f=open(str(item)+'_SPAdes_re-assembly_contigs.fa','w')
                 for record in SeqIO.parse('contigs.fasta', 'fasta'):
                     if len(record.seq) >= 1000:
-                        xxxx+=1
+                        kept_contigs+=1
                         f.write('>'+str(record.id)+'\n'+str(record.seq)+'\n')
                 f.close()
-        os.chdir(str(pwd))
+        os.chdir(str(cwd))
 
-        if xxxx >= 2:
-            os.system('mv '+str(item)+'_spades_reassembly/'+str(item)+'_SPAdes_re-assembly_contigs.fa '+str(reassembly_bin_folder)+'/'+str(item)+'_SPAdes_re-assembly_contigs.fa')
-        ### os.system('cp '+str(item)+'_spades_reassembly/mismatch_corrector/contigs/corrected_contigs.fasta '+str(reassembly_bin_folder)+'/'+str(item)+'_SPAdes_re-assembly_corrected_contigs.fa')
-        ### os.system('/home/emma/MEGAHIT-1.2.2-beta-Linux-static/bin/megahit -1 '+str(bin_seq[item][0])+' -2 '+str(bin_seq[item][1])+' -o '+str(item)+'_megahit_reassembly --min-contig-len 1000 -t '+str(num_threads))
-	    ### os.system('mv '+str(item)+'_megahit_reassembly/final.contigs.fa '+str(reassembly_bin_folder)+'/'+str(item)+'_megahit_re-assembly_contigs.fa')
+        if kept_contigs >= 2:
+            os.system('mv '+spades_dir+'/'+str(item)+'_SPAdes_re-assembly_contigs.fa '+str(out_folder)+'/'+str(item)+'_SPAdes_re-assembly_contigs.fa')
 
-        os.system('fq2fa --merge --filter '+str(bin_seq[item][0])+' '+str(bin_seq[item][1])+' idba.fa')
-        n=0
-        for record in SeqIO.parse('idba.fa','fasta'):
+        os.system('fq2fa --merge --filter '+str(r1)+' '+str(r2)+' '+idba_fa)
+        seq_len = 0
+        n = 0
+        for record in SeqIO.parse(idba_fa,'fasta'):
             n+=1
             if n == 1:
                 seq_len=len(record.seq)
-        
+
         if seq_len <= 125:
-            os.system('idba_ud -r idba.fa -o '+str(item)+'_idba_reassembly --num_threads '+str(num_threads)+' --min_contig 1000')
+            os.system('idba_ud -r '+idba_fa+' -o '+idba_dir+' --num_threads '+str(threads_per_job)+' --min_contig 1000')
         else:
-            os.system('idba_ud -l idba.fa -o '+str(item)+'_idba_reassembly --num_threads '+str(num_threads)+' --min_contig 1000')
+            os.system('idba_ud -l '+idba_fa+' -o '+idba_dir+' --num_threads '+str(threads_per_job)+' --min_contig 1000')
 
-        os.system('mv '+str(item)+'_idba_reassembly/contig.fa '+str(reassembly_bin_folder)+'/'+str(item)+'_IDBA_re-assembly_contigs.fa')
+        if os.path.isfile(idba_dir+'/contig.fa'):
+            os.system('mv '+idba_dir+'/contig.fa '+str(out_folder)+'/'+str(item)+'_IDBA_re-assembly_contigs.fa')
 
-        os.system('rm -rf '+str(item)+'_spades_reassembly')
-        os.system('rm -rf '+str(item)+'_idba_reassembly')
-        os.system('mv '+str(bin_seq[item][0])+' '+str(bin_seq[item][1])+' '+str(bins_seq_folder))
+        os.system('rm -rf '+spades_dir)
+        os.system('rm -rf '+idba_dir)
+        os.system('rm -f '+idba_fa)
+        os.system('mv '+str(r1)+' '+str(r2)+' '+str(seq_folder))
+
+    num_project = 1
+    if num_threads >= 40:
+        if num_threads < 60:
+            num_project = 2
+        else:
+            num_project = math.ceil(num_threads/30)
+    if ram >= 64:
+        num_project2 = max(1, math.ceil(ram/55))
+        if num_project2 < num_project:
+            num_project = num_project2
+    if num_project > len(bin_seq):
+        num_project = len(bin_seq)
+    if num_project < 1:
+        num_project = 1
+
+    threads_per_job = max(1, math.ceil(num_threads/num_project))
+    ram_per_job = max(8, math.floor(ram/num_project))
+
+    if num_project == 1:
+        for item in bin_seq.keys():
+            _reassembly_worker(item, bin_seq[item], threads_per_job, ram_per_job, reassembly_bin_folder, bins_seq_folder, pwd)
+    else:
+        pool=Pool(processes=num_project)
+        for item in bin_seq.keys():
+            pool.apply_async(_reassembly_worker, args=(item, bin_seq[item], threads_per_job, ram_per_job, reassembly_bin_folder, bins_seq_folder, pwd))
+        pool.close()
+        pool.join()
 
 def unicycler_mul(item, pwd, sr_folder, bin_seq, bin_lr, t_p_p, reassembly_bin_folder, bins_seq_folder):
     os.system('unicycler -1 '+str(pwd)+'/'+str(sr_folder)+'/'+str(bin_seq[item][0])+' -2 '+str(pwd)+'/'+str(sr_folder)+'/'+str(bin_seq[item][1])+' -l '+str(bin_lr[item])+' -o '+str(item)+'_unicycler_reassembly -t '+str(t_p_p)+' --mode conservative --no_pilon')
