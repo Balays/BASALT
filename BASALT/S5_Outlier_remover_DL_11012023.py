@@ -194,7 +194,7 @@ def basic_information(bin_folder, depth_list, kmer_list, pwd, num_threads):
                 fx.write(line.strip()+'\n')
         os.system('rm '+str(bin_id)+'_contig_depth_TNF_matrix.txt')
     fx.close() 
-    os.system('mkdir BestBinset_outlier_test')
+    os.makedirs('BestBinset_outlier_test', exist_ok=True)
     os.system('mv Bin_contig_depth_TNF_matrix.txt BestBinset_outlier_test')
     # os.system('rm BestBinset.fasta BestBinset.kmer.txt')
     # os.chdir(pwd+'/BestBinset_outlier_test')

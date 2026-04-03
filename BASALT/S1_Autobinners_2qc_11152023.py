@@ -1843,7 +1843,11 @@ def autobinner_main(assembly_list, datasets, lr, hifi_list, insert_size, num_thr
                 elif QC == 'checkm':
                     os.system('checkm lineage_wf -t '+str(num_threads)+' -x fa '+str(group)+'_'+assembly+'_1_SingleContig_genomes '+str(group)+'_'+assembly+'_1_SingleContig_checkm')
 
-                bins_folders[str(assembly)].append(str(group)+'_'+assembly+'_1_SingleContig_genomes')
+                try:
+                    bins_folders[str(assembly_list[item])].append(str(group)+'_'+assembly+'_1_SingleContig_genomes')
+                except:
+                    bins_folders[str(assembly_list[item])]=[]
+                    bins_folders[str(assembly_list[item])].append(str(group)+'_'+assembly+'_1_SingleContig_genomes')
             else:
                 os.system('rm -rf '+str(group)+'_'+assembly+'_1_SingleContig_genomes')
 
