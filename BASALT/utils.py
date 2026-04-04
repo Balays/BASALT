@@ -37,7 +37,8 @@ def resolve_weight_dir(local_dir=None):
         nested_candidate = os.path.join(candidate, "BASALT")
         if os.path.isdir(nested_candidate):
             return nested_candidate
-        return candidate
+        if os.path.isdir(candidate):
+            return candidate
     return repo_weight_dir
 
 

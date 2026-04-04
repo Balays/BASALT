@@ -19,8 +19,15 @@ def resolve_weight_dir(local_dir=None):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_weight_dir = os.path.join(script_dir, "BASALT")
     cache_weight_dir = os.path.join(os.path.expanduser("~"), ".cache", "BASALT")
-
-    return env_dir or repo_weight_dir or cache_weight_dir
+    for candidate in (env_dir, repo_weight_dir, cache_weight_dir):
+        if not candidate:
+            continue
+        nested_candidate = os.path.join(candidate, "BASALT")
+        if os.path.isdir(nested_candidate):
+            return nested_candidate
+        if os.path.isdir(candidate):
+            return candidate
+    return cache_weight_dir
 
 
 def models_already_extracted(destination_folder):
