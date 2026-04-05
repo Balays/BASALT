@@ -27,6 +27,8 @@ def resolve_weight_dir(local_dir=None):
             return nested_candidate
         if os.path.isdir(candidate):
             return candidate
+    if env_dir:
+        return env_dir
     return cache_weight_dir
 
 

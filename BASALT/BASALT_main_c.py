@@ -45,7 +45,9 @@ def _resolve_basalt_weight_dir():
             return nested_candidate
         if os.path.isdir(candidate):
             return candidate
-    return repo_weight_dir
+    if env_dir:
+        return env_dir
+    return cache_weight_dir
 
 
 def BASALT_main_c(assembly_list, datasets, num_threads, lr_list, hifi_list,
