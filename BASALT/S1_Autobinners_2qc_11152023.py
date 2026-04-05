@@ -200,6 +200,9 @@ def cal_connections(connections):
     """
     PEC={}
     for item in connections:
+        if not os.path.exists(item):
+            print('Warning: skip missing connection file '+str(item))
+            continue
         f=open(item, 'r')
         n=0
         for line in f:
