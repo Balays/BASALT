@@ -28,7 +28,7 @@ from S9_Reassembly_10262023 import *
 from S9p_Hybrid_Reassembly_10262023 import *
 from S10_OLC_new_10262023 import *
 from glob import glob
-from Cleanup import *
+from Cleanup import cleanup
 
 def _resolve_basalt_weight_dir():
     env_dir = os.environ.get("BASALT_WEIGHT")

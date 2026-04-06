@@ -19,7 +19,7 @@ from S9_Reassembly_checkm import *
 from S9p_Hybrid_Reassembly_checkm import *
 from S10_OLC_new_checkm import *
 from glob import glob
-from Cleanup import *
+from Cleanup import cleanup
 
 def _resolve_basalt_weight_dir():
     env_dir = os.environ.get("BASALT_WEIGHT")

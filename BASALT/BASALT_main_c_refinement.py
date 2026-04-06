@@ -19,7 +19,7 @@ from S6_retrieve_contigs_from_PE_contigs_checkm import *
 from S7_Contigs_retrieve_within_group_checkm import *
 from S7lr_finding_sr_contigs_basing_lr_and_polishing_checkm import *
 from glob import glob
-from Cleanup import *
+from Cleanup import cleanup
 
 def _resolve_basalt_weight_dir():
     env_dir = os.environ.get("BASALT_WEIGHT")

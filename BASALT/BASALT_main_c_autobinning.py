@@ -20,7 +20,7 @@ from S2_BinsAbundance_PE_connections_multiple_processes_pool_checkm import *
 from S3_Bins_comparator_within_group_checkm import *
 from S4_Multiple_Assembly_Comparitor_multiple_processes_bwt_checkm import *
 from glob import glob
-from Cleanup import *
+from Cleanup import cleanup
 
 def _resolve_basalt_weight_dir():
     env_dir = os.environ.get("BASALT_WEIGHT")
