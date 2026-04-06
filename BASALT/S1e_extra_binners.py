@@ -14,6 +14,7 @@ from Bio import SeqIO
 import sys, os, time
 from collections import Counter
 from multiprocessing import Pool
+from Cleanup import cleanup_binner_workspace, cleanup_checkm2_output
 
 
 def metabinner(assembly_file, depth_file, num_threads, ram, pwd, QC_software):
@@ -98,7 +99,15 @@ def metabinner(assembly_file, depth_file, num_threads, ram, pwd, QC_software):
         os.system('checkm lineage_wf -t '+str(num_threads)+' -x fa '+str(assembly_file)+'_100_metabinner_genomes '+str(assembly_file)+'_100_metabinner_checkm')
     elif QC_software == 'checkm2':
         os.system('checkm2 predict -t '+str(num_threads)+' -i '+str(assembly_file)+'_100_metabinner_genomes  -x fa -o '+str(assembly_file)+'_100_metabinner_checkm')
+        cleanup_checkm2_output(os.path.join(pwd, str(assembly_file)+'_100_metabinner_checkm'))
     os.system('rm -rf '+str(assembly_file)+'_metabinner '+str(assembly_file)+'_coverage_profile.tsv '+str(assembly_name)+'_kmer_4_f1000.csv')
+    cleanup_binner_workspace(
+        os.path.join(pwd, str(assembly_file)+'_100_metabinner_genomes'),
+        extra_patterns=[
+            str(assembly_file)+'_coverage_profile.tsv',
+            str(assembly_name)+'_kmer_4_f1000.csv',
+        ],
+    )
 
 def vamb(assembly_file, datasets, num_threads, pwd, QC_software):
     """
@@ -163,6 +172,7 @@ def vamb(assembly_file, datasets, num_threads, pwd, QC_software):
         os.system('checkm lineage_wf -t '+str(num_threads)+' -x fa '+str(assembly_file)+'_100_vamb_genomes '+str(assembly_file)+'_100_vamb_checkm')
     elif QC_software == 'checkm2':
         os.system('checkm2 predict -t '+str(num_threads)+' -i '+str(assembly_file)+'_100_vamb_genomes  -x fa -o '+str(assembly_file)+'_100_vamb_checkm')
+        cleanup_checkm2_output(os.path.join(pwd, str(assembly_file)+'_100_vamb_checkm'))
     # os.system('rm *.seed *.out *.err *.nto *.gff *.ffn *.faa *.ndb *.njs *.not *.ntf')
     os.system('rm -rf '+str(assembly_file)+'_vamb')
 
@@ -234,6 +244,7 @@ def lorbin(assembly_file, datasets, num_threads, pwd, QC_software):
         os.system('checkm lineage_wf -t '+str(num_threads)+' -x fa '+str(assembly_file)+'_100_lorbin_genomes '+str(assembly_file)+'_100_lorbin_checkm')
     elif QC_software == 'checkm2':
         os.system('checkm2 predict -t '+str(num_threads)+' -i '+str(assembly_file)+'_100_lorbin_genomes  -x fa -o '+str(assembly_file)+'_100_lorbin_checkm')
+        cleanup_checkm2_output(os.path.join(pwd, str(assembly_file)+'_100_lorbin_checkm'))
 
 
 

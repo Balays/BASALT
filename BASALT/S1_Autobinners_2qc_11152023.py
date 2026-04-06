@@ -15,6 +15,7 @@ import sys, os, time, gc
 from collections import Counter
 from multiprocessing import Pool
 import shutil
+from Cleanup import cleanup_binner_workspace, cleanup_checkm2_output, cleanup_semibin_workspace
 
 def fq2fa_conversion(filename):
     """
@@ -700,6 +701,17 @@ def metabat(assembly_file, pwd, depth_file, threshold, num_threads):
     f.write('Binning: '+str(metabat_genome)+'\n') #EMA: end modification accomplished
     f.close()
     bin_filtration(metabat_genome, pwd)
+    cleanup_binner_workspace(
+        os.path.join(pwd, str(metabat_genome)),
+        assembly_files=[str(assembly_file)],
+        depth_files=[str(depth_file)],
+        extra_patterns=[
+            str(metabat_genome)+'.unbinned.txt',
+            str(metabat_genome)+'.lowDepth.fa',
+            str(metabat_genome)+'.tooShort.fa',
+            str(metabat_genome)+'.BinInfo.txt',
+        ],
+    )
     # print('checking metabat bins with checkM')
     # print('----------')
     # metabat_checkm=str(assembly_file)+'_'+str(threshold)+'_metabat_checkm'
@@ -1156,6 +1168,21 @@ def autobinners(softwares, assembly_file, depth_file, depth_file_list, Coverage_
                 fb.write('Binning: '+str(maxbin2_genome)+'\n') #EMA: end modification accomplished
                 fb.close()
                 bin_filtration(maxbin2_genome, pwd)
+                cleanup_binner_workspace(
+                    os.path.join(pwd, str(maxbin2_genome)),
+                    assembly_files=[str(assembly_file)],
+                    depth_files=[str(depth_file)],
+                    extra_patterns=[
+                        str(maxbin2_genome)+'.abundance',
+                        str(maxbin2_genome)+'.marker',
+                        str(maxbin2_genome)+'.marker_of_each_bin.tar.gz',
+                        str(maxbin2_genome)+'.noclass',
+                        str(maxbin2_genome)+'.summary',
+                        str(maxbin2_genome)+'.tooshort',
+                        str(maxbin2_genome)+'.contig.tmp*',
+                        str(maxbin2_genome)+'.*.out*',
+                    ],
+                )
             
             # print('checking maxbin2 bins with checkM')
             # print('----------')
@@ -1308,6 +1335,9 @@ def autobinners(softwares, assembly_file, depth_file, depth_file_list, Coverage_
                     os.system('checkm2 predict -t '+str(num_threads)+' -i '+str(binset)+' -x fa -o '+str(binset_checkm[binset]))
                 elif QC == 'checkm':
                     os.system('checkm lineage_wf -t '+str(num_threads)+' -x fa '+str(binset)+' '+str(binset_checkm[binset]))
+
+            if QC == 'checkm2':
+                cleanup_checkm2_output(os.path.join(pwd, str(binset_checkm[binset])))
 
         ### checkm
         # checkm_proj_num=int(ram/40)
@@ -1820,6 +1850,7 @@ def autobinner_main(assembly_list, datasets, lr, hifi_list, insert_size, num_thr
                 except:
                     bins_folders[str(assembly_list[item])]=[]
                     bins_folders[str(assembly_list[item])].append(str(group)+'_'+assembly+'_'+str(xyz)+'_semibin_genomes')
+                cleanup_semibin_workspace(os.path.join(pwd, str(item_xyz)))
 
             # Collecting single contig bin
             

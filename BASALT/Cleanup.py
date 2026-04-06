@@ -4,7 +4,111 @@
 Helper utilities for cleaning up intermediate BASALT files.
 """
 
+import glob
 import os
+import shutil
+
+
+def _remove_path(path):
+    if os.path.isdir(path) and not os.path.islink(path):
+        shutil.rmtree(path, ignore_errors=True)
+    elif os.path.exists(path):
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
+
+
+def _remove_patterns(base_dir, patterns):
+    for pattern in patterns:
+        for path in glob.glob(os.path.join(base_dir, pattern)):
+            _remove_path(path)
+
+
+def cleanup_binner_workspace(bin_dir, assembly_files=None, depth_files=None,
+                             extra_patterns=None):
+    """
+    Remove large temporary files from a single binner output directory.
+
+    Parameters
+    ----------
+    bin_dir : str
+        Binner output directory.
+    assembly_files : list[str] | None
+        Copied assembly files to delete from the binner directory.
+    depth_files : list[str] | None
+        Copied depth / coverage files to delete from the binner directory.
+    extra_patterns : list[str] | None
+        Additional glob patterns to remove from the binner directory.
+    """
+    if not os.path.isdir(bin_dir):
+        return
+
+    patterns = [
+        'Coverage_list*.txt',
+        '*.sam',
+        '*.bam',
+        '*.bt2',
+        '*.njs',
+        '*.ndb',
+        '*.nto',
+        '*.ntf',
+        '*.not',
+        '*.nos',
+        '*.seed',
+        '*.err',
+    ]
+
+    if assembly_files:
+        patterns.extend(assembly_files)
+    if depth_files:
+        patterns.extend(depth_files)
+    if extra_patterns:
+        patterns.extend(extra_patterns)
+
+    _remove_patterns(bin_dir, patterns)
+
+
+def cleanup_semibin_workspace(bin_dir):
+    """
+    Remove SemiBin scratch tables after bins and QC outputs were created.
+    """
+    cleanup_binner_workspace(
+        bin_dir,
+        extra_patterns=[
+            'data.csv',
+            'data_split.csv',
+            '*_data_cov.csv',
+            '*_data_split_cov.csv',
+            'SemiBinRun.log',
+            'output_bins',
+            'pre_reclustering_bins',
+            'recluster_bins',
+        ],
+    )
+
+
+def cleanup_checkm2_output(checkm_dir):
+    """
+    Remove bulky CheckM2 intermediate folders once summary outputs exist.
+    """
+    if not os.path.isdir(checkm_dir):
+        return
+
+    quality_report = os.path.join(checkm_dir, 'quality_report.tsv')
+    if not os.path.exists(quality_report):
+        return
+
+    _remove_patterns(
+        checkm_dir,
+        [
+            'diamond_output',
+            'protein_files',
+            'genes',
+            'tmp',
+            'checkm2_res',
+        ],
+    )
 
 
 def cleanup(assembly_list):
