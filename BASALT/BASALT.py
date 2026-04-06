@@ -13,6 +13,7 @@ import time
 import sys
 import os
 import argparse
+import shutil
 from glob import glob
 
 
@@ -76,6 +77,8 @@ parser.add_argument('-c', '--coverage-list', type=str, dest='coverage_list',
                     help='List of depth file for refinement. Coverage file(s) could be generated from data feeding modole. e.g.: -c Coverage_matrix_for_binning_1_assembly.fa.txt,Coverage_matrix_for_binning_2_assembly.fa.txt')
 parser.add_argument('-b', '--binsets-list', type=str, dest='binsets_list',
                     help='List of binsets for de-replication. Binset depth file(s) could be generated from data feeding modole. e.g.: -b 1_assembly_BestBinsSet,2_assembly_BestBinsSet')
+parser.add_argument('--min-free-gb', type=float, dest='min_free_gb', default=10.0,
+                    help='Abort BASALT if free disk space drops to this threshold or below (default: 10 GB). Set to 0 to disable.')
 
 args = parser.parse_args()
 assemblies=args.assemblies
@@ -97,10 +100,54 @@ output_folder=args.output_folder_name
 sensitivity=args.binning_sensitive
 data_feeding_folder=args.data_feeding_folder
 binsetindex=args.extra_binset_start_index
+min_free_gb=args.min_free_gb
 # only_refinement=args.only_refinement
 refinement_binset=args.refinement_binset
 coverage_list=args.coverage_list
 binsets_list=args.binsets_list
+
+
+class DiskSpaceGuardError(RuntimeError):
+    """Raised when BASALT detects critically low free disk space."""
+
+
+def _guard_path():
+    return os.environ.get('BASALT_GUARD_PATH', os.getcwd())
+
+
+def _free_gb(path):
+    return shutil.disk_usage(path).free / float(1024 ** 3)
+
+
+def ensure_disk_space(context='operation'):
+    """
+    Abort the run if the available free space is below the configured threshold.
+    """
+    if min_free_gb is None or float(min_free_gb) <= 0:
+        return
+
+    check_path = _guard_path()
+    free_gb = _free_gb(check_path)
+    if free_gb <= float(min_free_gb):
+        raise DiskSpaceGuardError(
+            'BASALT aborted to protect the filesystem: '
+            + str(round(free_gb, 2)) + ' GB free at '
+            + str(check_path) + ' during ' + str(context)
+            + ' (threshold: ' + str(min_free_gb) + ' GB).'
+        )
+
+
+_ORIGINAL_OS_SYSTEM = os.system
+
+
+def _guarded_system(command):
+    ensure_disk_space('shell command start')
+    exit_code = _ORIGINAL_OS_SYSTEM(command)
+    ensure_disk_space('shell command end')
+    return exit_code
+
+
+os.system = _guarded_system
 
 # ---------------------------------------------------------------------------
 # Parse and normalize input lists
@@ -206,6 +253,7 @@ print('Extra binset(s) for data feeding:', str(data_feeding_folder))
 print('Refinement binset:', str(refinement_binset))
 print('List of coverage file(s):', str(coverage_list))
 print('Binset(s) list:', str(binsets_list))
+print('Minimum free disk safeguard:', str(min_free_gb), 'GB')
 
 # Normalized continue mode used across downstream modules
 if continue_mode == 'continue':
@@ -230,6 +278,7 @@ def main():
         writing results to the specified output folder.
     """
     global pwd, output_folder
+    ensure_disk_space('startup')
     # Main execution: select quality check implementation and functional module
     if QC_software == 'checkm2':
         if len(data_feeding_folder) != 0:
@@ -341,5 +390,9 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except DiskSpaceGuardError as exc:
+        sys.stderr.write(str(exc) + '\n')
+        sys.exit(2)
 
