@@ -377,7 +377,7 @@ def mapping_lr_o(assembly, group, datasets, num_threads, pwd, data_type):
 
         print('Sorting bam file')
         ### py2
-        os.system('samtools sort -@ '+str(num_threads)+' '+str(group)+'_lr'+str(i)+'.bam '+str(group)+'_lr'+str(i)+'_sorted') 
+        os.system('samtools sort -@ '+str(num_threads)+' -o '+str(group)+'_lr'+str(i)+'_sorted.bam '+str(group)+'_lr'+str(i)+'.bam') 
 
         try:
             with open(str(group)+'_lr'+str(i)+'_sorted.bam', 'r') as fh:
@@ -436,7 +436,7 @@ def mapping_hifi_split(assembly, group, long_read_split_fa, num_threads, pwd):
         parse_lr_sam_hifi_connecting_contigs(str(group)+'_LR-'+str(i)+'-bw2.sam')
         os.system('rm '+str(group)+'_LR-'+str(i)+'-bw2.sam')
         ### py2
-        os.system('samtools sort -@ '+str(num_threads)+' '+str(group)+'_LR-'+str(i)+'-bw2.bam '+str(group)+'_LR-'+str(i)+'-bw2_sorted') 
+        os.system('samtools sort -@ '+str(num_threads)+' -o '+str(group)+'_LR-'+str(i)+'-bw2_sorted.bam '+str(group)+'_LR-'+str(i)+'-bw2.bam') 
 
         try:
             with open(str(group)+'_LR-'+str(i)+'-bw2_sorted.bam', 'r') as fh:
@@ -500,7 +500,7 @@ def mapping_hifi_minimap(assembly, group, long_read_split_fa, num_threads, pwd):
         # parse_lr_sam_connecting_contigs(str(group)+'_LR-'+str(i)+'.sam')
         os.system('rm '+str(group)+'_LR-'+str(i)+'.sam')
         ### py2
-        os.system('samtools sort -@ '+str(num_threads)+' '+str(group)+'_LR-'+str(i)+'.bam '+str(group)+'_LR-'+str(i)+'_sorted') 
+        os.system('samtools sort -@ '+str(num_threads)+' -o '+str(group)+'_LR-'+str(i)+'_sorted.bam '+str(group)+'_LR-'+str(i)+'.bam') 
 
         try:
             with open(str(group)+'_LR-'+str(i)+'_sorted.bam', 'r') as fh:
@@ -607,8 +607,8 @@ def mapping(assembly, group, datasets, num_threads, pwd):
         connections.append('condensed.cytoscape.connections_'+str(group)+'_DNA-'+str(i)+'.tab')
         os.system('rm '+str(group)+'_DNA-'+str(i)+'.sam')
         ### py2
-        logfile.write(str('Command: samtools sort -@ '+str(num_threads)+' '+str(group)+'_DNA-'+str(i)+'.bam '+str(group)+'_DNA-'+str(i)+'_sorted')+'\n')
-        os.system('samtools sort -@ '+str(num_threads)+' '+str(group)+'_DNA-'+str(i)+'.bam '+str(group)+'_DNA-'+str(i)+'_sorted') 
+        logfile.write(str('Command: samtools sort -@ '+str(num_threads)+' -o '+str(group)+'_DNA-'+str(i)+'_sorted.bam '+str(group)+'_DNA-'+str(i)+'.bam')+'\n')
+        os.system('samtools sort -@ '+str(num_threads)+' -o '+str(group)+'_DNA-'+str(i)+'_sorted.bam '+str(group)+'_DNA-'+str(i)+'.bam') 
 
         try:
             with open(str(group)+'_DNA-'+str(i)+'_sorted.bam', 'r') as fh:
