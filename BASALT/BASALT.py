@@ -79,6 +79,10 @@ parser.add_argument('-b', '--binsets-list', type=str, dest='binsets_list',
                     help='List of binsets for de-replication. Binset depth file(s) could be generated from data feeding modole. e.g.: -b 1_assembly_BestBinsSet,2_assembly_BestBinsSet')
 parser.add_argument('--min-free-gb', type=float, dest='min_free_gb', default=10.0,
                     help='Abort BASALT if free disk space drops to this threshold or below (default: 10 GB). Set to 0 to disable.')
+parser.add_argument('--cleanup', dest='cleanup_enabled', action='store_true', default=True,
+                    help='Enable BASALT cleanup of intermediate files (default: enabled).')
+parser.add_argument('--no-cleanup', dest='cleanup_enabled', action='store_false',
+                    help='Disable BASALT cleanup and keep intermediate files for debugging or recovery.')
 
 args = parser.parse_args()
 assemblies=args.assemblies
@@ -101,10 +105,13 @@ sensitivity=args.binning_sensitive
 data_feeding_folder=args.data_feeding_folder
 binsetindex=args.extra_binset_start_index
 min_free_gb=args.min_free_gb
+cleanup_enabled=args.cleanup_enabled
 # only_refinement=args.only_refinement
 refinement_binset=args.refinement_binset
 coverage_list=args.coverage_list
 binsets_list=args.binsets_list
+
+os.environ['BASALT_CLEANUP_ENABLED'] = '1' if cleanup_enabled else '0'
 
 
 class DiskSpaceGuardError(RuntimeError):
@@ -254,6 +261,7 @@ print('Refinement binset:', str(refinement_binset))
 print('List of coverage file(s):', str(coverage_list))
 print('Binset(s) list:', str(binsets_list))
 print('Minimum free disk safeguard:', str(min_free_gb), 'GB')
+print('Cleanup enabled:', str(cleanup_enabled))
 
 # Normalized continue mode used across downstream modules
 if continue_mode == 'continue':

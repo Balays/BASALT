@@ -20,7 +20,7 @@ from S2_BinsAbundance_PE_connections_multiple_processes_pool_checkm import *
 from S3_Bins_comparator_within_group_checkm import *
 from S4_Multiple_Assembly_Comparitor_multiple_processes_bwt_checkm import *
 from glob import glob
-from Cleanup import cleanup
+from Cleanup import cleanup, cleanup_enabled
 
 def _resolve_basalt_weight_dir():
     env_dir = os.environ.get("BASALT_WEIGHT")
@@ -286,7 +286,8 @@ def BASALT_main_c_autobinning(assembly_list, datasets, num_threads, lr_list, hif
                 #     genomes_folder_name='_'.join(genomes_folder_name_list)
                 #     bins_folders[str(n)].append(genomes_folder_name)
             f1.close()    
-            os.system('rm *.bam')
+            if cleanup_enabled():
+                os.system('rm *.bam')
             
             f_cp_m=open('Basalt_checkpoint.txt', 'a')
             f_cp_m.write('1st autobinner done!')

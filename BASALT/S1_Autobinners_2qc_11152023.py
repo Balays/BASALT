@@ -19,6 +19,7 @@ from Cleanup import (
     cleanup_autobinner_assembly_workspace,
     cleanup_binner_workspace,
     cleanup_checkm2_output,
+    cleanup_enabled,
     cleanup_redundant_short_read_inputs,
     cleanup_semibin_workspace,
 )
@@ -379,7 +380,8 @@ def mapping_lr_o(assembly, group, datasets, num_threads, pwd, data_type):
         # parse_lr_sam_connecting_contigs(str(group)+'_lr'+str(i)+'.sam')
 
         os.system('samtools view -@ '+str(num_threads)+' -b -S '+str(group)+'_lr'+str(i)+'.sam -o '+str(group)+'_lr'+str(i)+'.bam')
-        os.system('rm '+str(group)+'_lr'+str(i)+'.sam')
+        if cleanup_enabled():
+            os.system('rm '+str(group)+'_lr'+str(i)+'.sam')
 
         print('Sorting bam file')
         ### py2
@@ -442,7 +444,8 @@ def mapping_hifi_split(assembly, group, long_read_split_fa, num_threads, pwd):
         os.system('samtools view -@ '+str(num_threads)+' -b -S '+str(group)+'_LR-'+str(i)+'-bw2.sam -o '+str(group)+'_LR-'+str(i)+'-bw2.bam')
 
         parse_lr_sam_hifi_connecting_contigs(str(group)+'_LR-'+str(i)+'-bw2.sam')
-        os.system('rm '+str(group)+'_LR-'+str(i)+'-bw2.sam')
+        if cleanup_enabled():
+            os.system('rm '+str(group)+'_LR-'+str(i)+'-bw2.sam')
         ### py2
         os.system('samtools sort -@ '+str(num_threads)+' -o '+str(group)+'_LR-'+str(i)+'-bw2_sorted.bam '+str(group)+'_LR-'+str(i)+'-bw2.bam') 
 
@@ -453,7 +456,8 @@ def mapping_hifi_split(assembly, group, long_read_split_fa, num_threads, pwd):
             print('samtools sorting '+str(group)+'_LR-'+str(i)+'-bw2.bam failed. Re doing')
             ### py3
             os.system('samtools sort -@ '+str(num_threads)+' -o '+str(group)+'_LR-'+str(i)+'-bw2_sorted.bam '+str(group)+'_LR-'+str(i)+'-bw2.bam' )
-        os.system('rm '+str(group)+'_LR-'+str(i)+'-bw2.bam')
+        if cleanup_enabled():
+            os.system('rm '+str(group)+'_LR-'+str(i)+'-bw2.bam')
        
         f_coverage_matrix.write('Coverage_list_LR-'+str(i)+'-bw2.txt'+'\n')
 
@@ -506,7 +510,8 @@ def mapping_hifi_minimap(assembly, group, long_read_split_fa, num_threads, pwd):
         os.system('samtools view -@ '+str(num_threads)+' -b -S '+str(group)+'_LR-'+str(i)+'.sam -o '+str(group)+'_LR-'+str(i)+'.bam')
 
         # parse_lr_sam_connecting_contigs(str(group)+'_LR-'+str(i)+'.sam')
-        os.system('rm '+str(group)+'_LR-'+str(i)+'.sam')
+        if cleanup_enabled():
+            os.system('rm '+str(group)+'_LR-'+str(i)+'.sam')
         ### py2
         os.system('samtools sort -@ '+str(num_threads)+' -o '+str(group)+'_LR-'+str(i)+'_sorted.bam '+str(group)+'_LR-'+str(i)+'.bam') 
 
@@ -518,7 +523,8 @@ def mapping_hifi_minimap(assembly, group, long_read_split_fa, num_threads, pwd):
             ### py3
             os.system('samtools sort -@ '+str(num_threads)+' -o '+str(group)+'_LR-'+str(i)+'_sorted.bam '+str(group)+'_LR-'+str(i)+'.bam' )
         
-        os.system('rm '+str(group)+'_LR-'+str(i)+'.bam')
+        if cleanup_enabled():
+            os.system('rm '+str(group)+'_LR-'+str(i)+'.bam')
        
         f_coverage_matrix.write('Coverage_list_LR-'+str(i)+'.txt'+'\n')
 
@@ -613,7 +619,8 @@ def mapping(assembly, group, datasets, num_threads, pwd):
         os.system('Cytoscapeviz.pl -i '+str(group)+'_DNA-'+str(i)+'.sam -f 2 -a 150 -e 500 -m 3000 -c')
         os.system('mv condensed.cytoscape.connections.tab condensed.cytoscape.connections_'+str(group)+'_DNA-'+str(i)+'.tab')
         connections.append('condensed.cytoscape.connections_'+str(group)+'_DNA-'+str(i)+'.tab')
-        os.system('rm '+str(group)+'_DNA-'+str(i)+'.sam')
+        if cleanup_enabled():
+            os.system('rm '+str(group)+'_DNA-'+str(i)+'.sam')
         ### py2
         logfile.write(str('Command: samtools sort -@ '+str(num_threads)+' -o '+str(group)+'_DNA-'+str(i)+'_sorted.bam '+str(group)+'_DNA-'+str(i)+'.bam')+'\n')
         os.system('samtools sort -@ '+str(num_threads)+' -o '+str(group)+'_DNA-'+str(i)+'_sorted.bam '+str(group)+'_DNA-'+str(i)+'.bam') 
@@ -704,7 +711,8 @@ def metabat(assembly_file, pwd, depth_file, threshold, num_threads):
     os.system('metabat2 -t '+str(num_threads)+' -i '+str(assembly_file)+' -a '+str(depth_file)+' -o '+str(metabat_genome)+' --unbinned --maxEdges '+str(threshold))
     ###os.system('metabat2 -t '+str(num_threads)+' -i '+str(assembly_file)+' -a '+str(depth_file)+' -o '+str(metabat_genome)+' --unbinned --maxEdges '+str(threshold))
     os.system('mv '+str(metabat_genome)+'.unbinned.fa '+str(metabat_genome)+'.unbinned.txt')
-    os.system('rm '+str(assembly_file))
+    if cleanup_enabled():
+        os.system('rm '+str(assembly_file))
     
     os.chdir(pwd)
     f=open('Autobinner_checkpoint.txt','a')
@@ -1169,7 +1177,8 @@ def autobinners(softwares, assembly_file, depth_file, depth_file_list, Coverage_
                 maxbin2_checkm=str(assembly_file)+'_'+str(item)+'_maxbin2_checkm'
                 binset_checkm[str(assembly_file)+'_'+str(item)+'_maxbin2_genomes']=maxbin2_checkm
                 os.chdir(pwd+'/'+str(maxbin2_genome))
-                os.system('rm '+str(assembly_file))
+                if cleanup_enabled():
+                    os.system('rm '+str(assembly_file))
                 os.chdir(pwd)
                 f=open('Autobinner_checkpoint.txt','a')
                 f.write('Binning: '+str(maxbin2_genome)+'\n') #EMA: end modification accomplished
@@ -1793,7 +1802,8 @@ def autobinner_main(assembly_list, datasets, lr, hifi_list, insert_size, num_thr
                 ram,
                 bam_sorted1  
             )
-            os.system('rm Coverage_list_*')
+            if cleanup_enabled():
+                os.system('rm Coverage_list_*')
 
             # ### SemiBin2
             print('Performing Semibin2')
@@ -1839,7 +1849,8 @@ def autobinner_main(assembly_list, datasets, lr, hifi_list, insert_size, num_thr
 
                 os.system('mv '+pwd+'/'+str(group)+'_'+assembly+'_'+str(xyz)+'_semibin_genomes/output_bins/* '+pwd+'/'+str(group)+'_'+assembly+'_'+str(xyz)+'_semibin_genomes')
                 os.chdir(pwd+'/'+str(group)+'_'+assembly+'_'+str(xyz)+'_semibin_genomes')
-                os.system('rm -rf output_bins')
+                if cleanup_enabled():
+                    os.system('rm -rf output_bins')
                 os.system('gzip -d *.gz')
 
                 os.chdir(pwd+'/'+str(item_xyz))
@@ -1893,7 +1904,8 @@ def autobinner_main(assembly_list, datasets, lr, hifi_list, insert_size, num_thr
                     bins_folders[str(assembly_list[item])]=[]
                     bins_folders[str(assembly_list[item])].append(str(group)+'_'+assembly+'_1_SingleContig_genomes')
             else:
-                os.system('rm -rf '+str(group)+'_'+assembly+'_1_SingleContig_genomes')
+                if cleanup_enabled():
+                    os.system('rm -rf '+str(group)+'_'+assembly+'_1_SingleContig_genomes')
 
             f=open('Autobinner_checkpoint.txt','a')
             f.write('ABA: '+str(item)+'\n') #EMA: end modification accomplished

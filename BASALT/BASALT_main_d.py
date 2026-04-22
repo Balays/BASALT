@@ -28,7 +28,7 @@ from S9_Reassembly_10262023 import *
 from S9p_Hybrid_Reassembly_10262023 import *
 from S10_OLC_new_10262023 import *
 from glob import glob
-from Cleanup import cleanup
+from Cleanup import cleanup, cleanup_enabled
 
 def _resolve_basalt_weight_dir():
     env_dir = os.environ.get("BASALT_WEIGHT")
@@ -358,7 +358,8 @@ def BASALT_main_d(assembly_list, datasets, num_threads, lr_list, hifi_list,
                 #     genomes_folder_name='_'.join(genomes_folder_name_list)
                 #     bins_folders[str(n)].append(genomes_folder_name)
             f1.close()    
-            os.system('rm *.bam')
+            if cleanup_enabled():
+                os.system('rm *.bam')
             
             f_cp_m=open('Basalt_checkpoint.txt', 'a')
             f_cp_m.write('1st autobinner done!')
@@ -792,7 +793,8 @@ def BASALT_main_d(assembly_list, datasets, num_threads, lr_list, hifi_list,
                     # sr_folder='BestBinset_outlier_refined_filtrated_retrieved_polished_sr_bins_seq'
                     # lr_folder='BestBinset_outlier_refined_filtrated_retrieved_long_read'
                     hybrid_re_assembly_main(polished_binset, sr_folder, lr_folder, ram, num_threads)
-                    os.system('rm -rf SPAdes_corrected_reads')
+                    if cleanup_enabled():
+                        os.system('rm -rf SPAdes_corrected_reads')
                     f_cp_m=open('Basalt_checkpoint.txt', 'a')
                     f_cp_m.write('\n'+'9th reassembly done.'+'\t'+str(polished_binset)+'_re-assembly')
                     f_cp_m.close()
@@ -861,13 +863,15 @@ def BASALT_main_d(assembly_list, datasets, num_threads, lr_list, hifi_list,
                         if num > i:
                             i = num
                     
-                    for i in range(1,num+1):
-                        os.system('rm Remained_seq1.fq_'+str(i)+' '+'Remained_seq2.fq_'+str(i))
+                    if cleanup_enabled():
+                        for i in range(1,num+1):
+                            os.system('rm Remained_seq1.fq_'+str(i)+' '+'Remained_seq2.fq_'+str(i))
                     os.system('mkdir Remained_seq')
                     os.system('mv 2nd_Remained_seq1.fq '+pwd+'/Remained_seq/Remained_seq1.fq')
                     os.system('mv 2nd_Remained_seq2.fq '+pwd+'/Remained_seq/Remained_seq2.fq')
                     os.system('tar -zcvf Remained_seq.tar.gz Remained_seq')
-                    os.system('rm -rf Remained_seq')
+                    if cleanup_enabled():
+                        os.system('rm -rf Remained_seq')
                     f_cp_m=open('Basalt_checkpoint.txt', 'a')
                     f_cp_m.write('\n'+'11th 2nd Polishing done!')
                     f_cp_m.close()
@@ -980,7 +984,8 @@ def BASALT_main_d(assembly_list, datasets, num_threads, lr_list, hifi_list,
                     
                     os.system('mv '+file+'2 '+file)
         
-        os.system('rm *quality_report_o.tsv')
+        if cleanup_enabled():
+            os.system('rm *quality_report_o.tsv')
         os.chdir(pwd)
 
         if x == 0:
@@ -993,10 +998,13 @@ def BASALT_main_d(assembly_list, datasets, num_threads, lr_list, hifi_list,
         f_cp_m.write('\n'+'BASALT done!')
         f_cp_m.close()
     print('BASALT main program accomplished!')
-    print('BASALT will continue to cleanup or compress all the temp files. The results could be found in folder \'Final_bestbinset\'. Please wait for a little bit longer')
+    if cleanup_enabled():
+        print('BASALT will continue to cleanup or compress all the temp files. The results could be found in folder \'Final_bestbinset\'. Please wait for a little bit longer')
+    else:
+        print('BASALT cleanup is disabled. Intermediate files will be kept for debugging or reuse.')
 
     ### Cleanup
-    if functional_module == 'all':
+    if functional_module == 'all' and cleanup_enabled():
         os.system('rm *.njs *.ndb *.nto *.ntf *.not *.nos')
         os.mkdir('Coverage_depth_connection_SimilarBin_files_backup')
         os.system('mv *.depth.txt Coverage_matrix_* Combat_* condense_connections_* Connections_* Similar_bins.txt Coverage_depth_connection_SimilarBin_files_backup')

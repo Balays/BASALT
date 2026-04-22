@@ -9,6 +9,14 @@ import os
 import shutil
 
 
+def cleanup_enabled():
+    """
+    Return whether cleanup behavior is enabled for this BASALT run.
+    """
+    value = str(os.environ.get('BASALT_CLEANUP_ENABLED', '1')).strip().lower()
+    return value not in ('0', 'false', 'no', 'off')
+
+
 def _remove_path(path):
     if os.path.isdir(path) and not os.path.islink(path):
         shutil.rmtree(path, ignore_errors=True)
@@ -42,6 +50,8 @@ def cleanup_binner_workspace(bin_dir, assembly_files=None, depth_files=None,
         Additional glob patterns to remove from the binner directory.
     """
     if not os.path.isdir(bin_dir):
+        return
+    if not cleanup_enabled():
         return
 
     patterns = [
@@ -94,6 +104,8 @@ def cleanup_checkm2_output(checkm_dir):
     """
     if not os.path.isdir(checkm_dir):
         return
+    if not cleanup_enabled():
+        return
 
     quality_report = os.path.join(checkm_dir, 'quality_report.tsv')
     if not os.path.exists(quality_report):
@@ -122,6 +134,8 @@ def cleanup_autobinner_assembly_workspace(work_dir, group, assembly_name):
     """
     if not os.path.isdir(work_dir):
         return
+    if not cleanup_enabled():
+        return
 
     assembly_prefix = f'{group}_{assembly_name}'
     depth_prefix = f'{group}_assembly.depth'
@@ -148,6 +162,8 @@ def cleanup_redundant_short_read_inputs(original_reads, modified_reads):
     """
     Drop original short-read files once PE-tracking-ready copies exist.
     """
+    if not cleanup_enabled():
+        return
     for original_read, modified_read in zip(original_reads, modified_reads):
         if os.path.exists(modified_read) and os.path.exists(original_read):
             _remove_path(original_read)
@@ -162,6 +178,8 @@ def cleanup(assembly_list):
     assembly_list : list
         List of assemblies. Currently unused but kept for API compatibility.
     """
+    if not cleanup_enabled():
+        return
     os.system('rm *.njs *.ndb *.nto *.ntf *.not *.nos')
     os.mkdir('Coverage_depth_connection_SimilarBin_files_backup')
     os.system(

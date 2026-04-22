@@ -19,7 +19,7 @@ from S9_Reassembly_checkm import *
 from S9p_Hybrid_Reassembly_checkm import *
 from S10_OLC_new_checkm import *
 from glob import glob
-from Cleanup import cleanup
+from Cleanup import cleanup, cleanup_enabled
 
 def _resolve_basalt_weight_dir():
     env_dir = os.environ.get("BASALT_WEIGHT")
@@ -299,7 +299,8 @@ def BASALT_main_c_re_assembly(assembly_list, datasets, num_threads, lr_list, hif
                 # sr_folder='BestBinset_outlier_refined_filtrated_retrieved_polished_sr_bins_seq'
                 # lr_folder='BestBinset_outlier_refined_filtrated_retrieved_long_read'
                 hybrid_re_assembly_main(polished_binset, sr_folder, lr_folder, ram, num_threads)
-                os.system('rm -rf SPAdes_corrected_reads')
+                if cleanup_enabled():
+                    os.system('rm -rf SPAdes_corrected_reads')
                 f_cp_m=open('Basalt_checkpoint.txt', 'a')
                 f_cp_m.write('\n'+'9th reassembly done.'+'\t'+str(polished_binset)+'_re-assembly')
                 f_cp_m.close()
@@ -347,13 +348,15 @@ def BASALT_main_c_re_assembly(assembly_list, datasets, num_threads, lr_list, hif
                         if num > i:
                             i = num
                     
-                    for i in range(1,num+1):
-                        os.system('rm Remained_seq1.fq_'+str(i)+' '+'Remained_seq2.fq_'+str(i))
+                    if cleanup_enabled():
+                        for i in range(1,num+1):
+                            os.system('rm Remained_seq1.fq_'+str(i)+' '+'Remained_seq2.fq_'+str(i))
                     os.system('mkdir Remained_seq')
                     os.system('mv 2nd_Remained_seq1.fq '+pwd+'/Remained_seq/Remained_seq1.fq')
                     os.system('mv 2nd_Remained_seq2.fq '+pwd+'/Remained_seq/Remained_seq2.fq')
                     os.system('tar -zcvf Remained_seq.tar.gz Remained_seq')
-                    os.system('rm -rf Remained_seq')
+                    if cleanup_enabled():
+                        os.system('rm -rf Remained_seq')
                     f_cp_m=open('Basalt_checkpoint.txt', 'a')
                     f_cp_m.write('\n'+'11th 2nd Polishing done!')
                     f_cp_m.close()
@@ -446,7 +449,8 @@ def BASALT_main_c_re_assembly(assembly_list, datasets, num_threads, lr_list, hif
                         f.close()
                         
                         os.system('mv '+file+'2 '+file)
-            os.system('rm *bin_stats_ext_o.tsv')
+            if cleanup_enabled():
+                os.system('rm *bin_stats_ext_o.tsv')
             os.chdir(pwd)
 
             f_cp_m=open('Basalt_checkpoint.txt', 'a')
