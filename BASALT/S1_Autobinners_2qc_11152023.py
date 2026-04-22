@@ -15,7 +15,13 @@ import sys, os, time, gc
 from collections import Counter
 from multiprocessing import Pool
 import shutil
-from Cleanup import cleanup_binner_workspace, cleanup_checkm2_output, cleanup_semibin_workspace
+from Cleanup import (
+    cleanup_autobinner_assembly_workspace,
+    cleanup_binner_workspace,
+    cleanup_checkm2_output,
+    cleanup_redundant_short_read_inputs,
+    cleanup_semibin_workspace,
+)
 
 def fq2fa_conversion(filename):
     """
@@ -386,6 +392,8 @@ def mapping_lr_o(assembly, group, datasets, num_threads, pwd, data_type):
             print('samtools sorting '+str(group)+'_lr'+str(i)+'.bam failed. Redoing')
             ### py3
             os.system('samtools sort -@ '+str(num_threads)+' -o '+str(group)+'_lr'+str(i)+'_sorted.bam '+str(group)+'_lr'+str(i)+'.bam' )
+        if os.path.exists(str(group)+'_lr'+str(i)+'_sorted.bam') and os.path.exists(str(group)+'_lr'+str(i)+'.bam'):
+            os.remove(str(group)+'_lr'+str(i)+'.bam')
     
         f_coverage_matrix.write('Coverage_list_lr'+str(i)+'.txt'+'\n')
 
@@ -618,6 +626,8 @@ def mapping(assembly, group, datasets, num_threads, pwd):
             ### py3
             logfile.write(str('Command: samtools sort -@ '+str(num_threads)+' -o '+str(group)+'_DNA-'+str(i)+'_sorted.bam '+str(group)+'_DNA-'+str(i)+'.bam')+'\n')
             os.system('samtools sort -@ '+str(num_threads)+' -o '+str(group)+'_DNA-'+str(i)+'_sorted.bam '+str(group)+'_DNA-'+str(i)+'.bam' )
+        if os.path.exists(str(group)+'_DNA-'+str(i)+'_sorted.bam') and os.path.exists(str(group)+'_DNA-'+str(i)+'.bam'):
+            os.remove(str(group)+'_DNA-'+str(i)+'.bam')
        
         f_coverage_matrix.write('Coverage_list_DNA-'+str(i)+'.txt'+'\n')
 
@@ -1545,9 +1555,8 @@ def autobinner_main(assembly_list, datasets, lr, hifi_list, insert_size, num_thr
             if str(item) not in end_mo_acc.keys():
                 datasets_fq[item]=[]
                 datasets_fq[item].append(ModifyEnd(datasets[item][0], 1))
-                # os.system('rm '+str(datasets[item][0]))
                 datasets_fq[item].append(ModifyEnd(datasets[item][1], 2))
-                # os.system('rm '+str(datasets[item][1]))
+                cleanup_redundant_short_read_inputs(datasets[item], datasets_fq[item])
                 print('End modification accomplished: '+str(item))
                 f=open('Autobinner_checkpoint.txt','a')
                 f.write('EMA: '+str(item)+'\n') #EMA: end modification accomplished
@@ -1559,6 +1568,7 @@ def autobinner_main(assembly_list, datasets, lr, hifi_list, insert_size, num_thr
                 datasets_fq[item]=[]
                 datasets_fq[item].append('PE_r1_'+str(datasets[item][0]))
                 datasets_fq[item].append('PE_r2_'+str(datasets[item][1]))
+                cleanup_redundant_short_read_inputs(datasets[item], datasets_fq[item])
             # datasets_fq[item].append(str(datasets[item][0]))
             # datasets_fq[item].append(str(datasets[item][1]))
 
@@ -1891,6 +1901,7 @@ def autobinner_main(assembly_list, datasets, lr, hifi_list, insert_size, num_thr
             fb=open('Basalt_log.txt','a')
             fb.write('ABA: '+str(item)+'\n') #EMA: end modification accomplished
             fb.close()
+            cleanup_autobinner_assembly_workspace(pwd, group, assembly)
         connections_total_dict[str(assembly_list[item])]='condense_connections_'+assembly_label+'.txt'
         depth_total[str(assembly_list[item])]=mo_assembly_depth
         assembly_MoDict[str(assembly_list[item])]=mo_assembly

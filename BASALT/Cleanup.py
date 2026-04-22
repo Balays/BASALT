@@ -111,6 +111,48 @@ def cleanup_checkm2_output(checkm_dir):
     )
 
 
+def cleanup_autobinner_assembly_workspace(work_dir, group, assembly_name):
+    """
+    Remove large top-level autobinner intermediates for one finished assembly.
+
+    This is intentionally conservative: it keeps the modified assembly FASTA,
+    the merged PE-connection summary and the main depth file because later
+    BASALT stages still consume those, but removes the large mapping outputs
+    and temporary indices once a per-assembly autobinning run is complete.
+    """
+    if not os.path.isdir(work_dir):
+        return
+
+    assembly_prefix = f'{group}_{assembly_name}'
+    depth_prefix = f'{group}_assembly.depth'
+    patterns = [
+        f'{group}_DNA-*.sam',
+        f'{group}_DNA-*.bam',
+        f'{group}_lr*.sam',
+        f'{group}_lr*.bam',
+        f'{group}_LR-*.sam',
+        f'{group}_LR-*.bam',
+        f'{assembly_prefix}*.bt2',
+        f'{assembly_prefix}.mmi',
+        f'condensed.cytoscape.connections_{group}_DNA-*.tab',
+        f'Coverage_list_{group}_{assembly_name}.txt',
+        f'Concoct_{assembly_prefix}',
+        f'Concoct_{depth_prefix}.txt',
+        f'{depth_prefix}_1.txt',
+        f'{depth_prefix}_2.txt',
+    ]
+    _remove_patterns(work_dir, patterns)
+
+
+def cleanup_redundant_short_read_inputs(original_reads, modified_reads):
+    """
+    Drop original short-read files once PE-tracking-ready copies exist.
+    """
+    for original_read, modified_read in zip(original_reads, modified_reads):
+        if os.path.exists(modified_read) and os.path.exists(original_read):
+            _remove_path(original_read)
+
+
 def cleanup(assembly_list):
     """
     Remove intermediate index/coverage files and archive key matrices.
