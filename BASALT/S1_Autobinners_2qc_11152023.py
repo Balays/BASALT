@@ -1604,6 +1604,8 @@ def autobinner_main(assembly_list, datasets, lr, hifi_list, insert_size, num_thr
             depth_file_list=[]
             if str(group) not in mapping_ds.keys():
                 tok=0
+                bam_sorted1=''
+                bam_sorted2=''
                 if len(datasets_fq) != 0:
                     print('Building Bowtie2 index')
                     os.system('bowtie2-build '+str(group)+'_'+assembly+' '+str(group)+'_'+assembly)
@@ -1627,6 +1629,7 @@ def autobinner_main(assembly_list, datasets, lr, hifi_list, insert_size, num_thr
                 connections_total.close()
 
                 sort_bam={}
+                bam_sorted2_parts=[]
                 if len(lr) != 0 or len(hifi_list) != 0:
                     print('Start mapping long-reads')
                     if len(hifi_list) != 0:
@@ -1661,22 +1664,27 @@ def autobinner_main(assembly_list, datasets, lr, hifi_list, insert_size, num_thr
                             pool.apply_async(split_reads,args=(reads,read_rename1,read_rename2, insert_size))
                         pool.close()
                         pool.join()
-                        
+
                         if len(hifi_list) == 1:
                             bam_hifi_bw2_sorted=mapping_hifi_split(assembly, group, long_read_split_fa, num_threads, pwd)
                             bam_hifi_minimap2_sorted=mapping_hifi_minimap(assembly, group, hifi_list, num_threads, pwd)
-                            bam_sorted2=bam_hifi_bw2_sorted+' '+bam_hifi_minimap2_sorted
+                            bam_sorted2_parts.extend(str(bam_hifi_bw2_sorted).split())
+                            bam_sorted2_parts.extend(str(bam_hifi_minimap2_sorted).split())
                             sort_bam[bam_hifi_bw2_sorted]=0
                             sort_bam[bam_hifi_minimap2_sorted]=0
                             
                         else:
                             bam_hifi_bw2_sorted=mapping_hifi_split(assembly, group, long_read_split_fa, num_threads, pwd)
-                            bam_sorted2=bam_hifi_bw2_sorted
+                            bam_sorted2_parts.extend(str(bam_hifi_bw2_sorted).split())
                             sort_bam[bam_hifi_bw2_sorted]=0
 
                     if len(lr) != 0:
                         data_type='ont'
-                        bam_sorted2=mapping_lr_o(assembly, group, lr, num_threads, pwd, data_type)
+                        bam_lr_sorted=mapping_lr_o(assembly, group, lr, num_threads, pwd, data_type)
+                        bam_sorted2_parts.extend(str(bam_lr_sorted).split())
+
+                    if len(bam_sorted2_parts) != 0:
+                        bam_sorted2=' '.join(bam_sorted2_parts)
 
                 if len(datasets_fq) == 0:
                     bam_sorted=bam_sorted2
@@ -1760,26 +1768,30 @@ def autobinner_main(assembly_list, datasets, lr, hifi_list, insert_size, num_thr
                 f.write('Mapping: '+str(group)+'\n') #EMA: end modification accomplished
                 f.close()
             else:
+                bam_sorted1=''
+                bam_sorted2=''
                 if len(datasets_fq) != 0:
-                    for i in range(1, len(datasets_fq)+1):
-                        if i == 1:
-                            bam_sorted1='1_DNA-1_sorted.bam'
-                        else:
-                            bam_sorted1+=' 1_DNA-'+str(i)+'_sorted.bam'
-                    
-                if len(lr) != 0:
-                    for i in range(1, len(lr)+1):
-                        if i == 1:
-                            bam_sorted2='1_LR-1_sorted.bam 1_LR-1-bw2_sorted.bam'
-                        else:
-                            bam_sorted2+=' 1_LR-'+str(i)+'_sorted.bam 1_LR-'+str(i)+'-bw2_sorted.bam'
+                    bam_sorted1=' '.join([str(group)+'_DNA-'+str(i)+'_sorted.bam' for i in range(1, len(datasets_fq)+1)])
 
-                if len(datasets_fq) != 0 and len(lr) == 0:
-                    bam_sorted=bam_sorted1
-                elif len(datasets_fq) == 0 and len(lr) != 0:
+                bam_sorted2_parts=[]
+                if len(lr) != 0:
+                    bam_sorted2_parts.extend([str(group)+'_lr'+str(i)+'_sorted.bam' for i in range(1, len(lr)+1)])
+
+                if len(hifi_list) != 0:
+                    bam_sorted2_parts.extend([str(group)+'_LR-'+str(i)+'-bw2_sorted.bam' for i in range(1, len(hifi_list)+1)])
+                    if len(hifi_list) == 1:
+                        bam_sorted2_parts.append(str(group)+'_LR-1_sorted.bam')
+
+                if len(bam_sorted2_parts) != 0:
+                    bam_sorted2=' '.join(bam_sorted2_parts)
+
+                if len(datasets_fq) == 0:
                     bam_sorted=bam_sorted2
-                elif len(datasets_fq) != 0 and len(lr) != 0:
-                    bam_sorted=bam_sorted1+' '+bam_sorted2
+                elif len(datasets_fq) != 0:
+                    if len(lr) == 0 and len(hifi_list) == 0:
+                        bam_sorted=bam_sorted1
+                    else:
+                        bam_sorted=bam_sorted1+' '+bam_sorted2
                     
             ### metabat etc.
             # Coverage_list_file='Coverage_list_'+str(int(item)+1)+'_'+str(assembly_list[item])+'.txt'
@@ -1800,7 +1812,7 @@ def autobinner_main(assembly_list, datasets, lr, hifi_list, insert_size, num_thr
                 QC,
                 num_threads,
                 ram,
-                bam_sorted1  
+                bam_sorted
             )
             if cleanup_enabled():
                 os.system('rm Coverage_list_*')
