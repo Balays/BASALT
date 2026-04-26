@@ -2746,6 +2746,18 @@ def multiple_assembly_comparitor_main(Contig_list_o, BestBinSet_list_o,
     None
         Writes comparison and selection results to disk.
     """
+    def _count_bin_fastas(folder_path):
+        """Count FASTA-like bin files in a BestBinsSet folder."""
+        fasta_suffixes = ('.fa', '.fasta', '.fna', '.fas', '.fsa')
+        count = 0
+        if not os.path.isdir(folder_path):
+            return 0
+        for root, dirs, files in os.walk(folder_path):
+            for file in files:
+                if file.lower().endswith(fasta_suffixes):
+                    count += 1
+        return count
+
     pwd=os.getcwd()
     try:
         flog=open('Basalt_log.txt','a')
@@ -2786,29 +2798,47 @@ def multiple_assembly_comparitor_main(Contig_list_o, BestBinSet_list_o,
         BestBinSet_list, Contig_list, Coverage_list = [], [], []
         for i in range(0, len(BestBinSet_list_o)):
             folder_name=str(BestBinSet_list_o[i])
-            xyzzz=0
-            os.chdir(pwd+'/'+folder_name)
-            for root, dirs, files in os.walk(pwd+'/'+folder_name):
-                for file in files:
-                    hz = file.split('.')[-1]
-                    
-                    if 'fa' in hz:
-                        xyzzz+=1
-            os.chdir(pwd)
-            if xyzzz != 0:
+            folder_path = os.path.join(pwd, folder_name)
+            if _count_bin_fastas(folder_path) != 0:
                 BestBinSet_list.append(folder_name)
                 Coverage_list.append(str(Coverage_list_o[i]))
                 Contig_list.append(str(Contig_list_o[i]))
 
-        contig_num=len(Contig_list)
-        if contig_num == 0:
-            print('Error! There is no qualitied bin after autobinning process. Please check your data')
+        if len(BestBinSet_list) == 0 and len(BestBinSet_list_o) != 0:
+            warning_msg = (
+                'No FASTA-like bins were detected inside the selected BestBinsSet folders '
+                'with the strict filter; falling back to the original BestBinsSet folder list.'
+            )
+            print(warning_msg)
             try:
                 flog=open('Basalt_log.txt','a')
             except:
                 flog=open('Basalt_log.txt','w')
-            flog.write('Error! There is no qualitied bin after autobinning process. Please check your data'+'\n')
+            flog.write(warning_msg+'\n')
             flog.close()
+
+            for i in range(0, len(BestBinSet_list_o)):
+                folder_name = str(BestBinSet_list_o[i])
+                folder_path = os.path.join(pwd, folder_name)
+                if os.path.isdir(folder_path):
+                    BestBinSet_list.append(folder_name)
+                    Coverage_list.append(str(Coverage_list_o[i]))
+                    Contig_list.append(str(Contig_list_o[i]))
+
+        contig_num=len(Contig_list)
+        if contig_num == 0:
+            error_msg = (
+                'Error! There is no qualitied bin after autobinning process. '
+                'Please check your data and BestBinsSet folders.'
+            )
+            print(error_msg)
+            try:
+                flog=open('Basalt_log.txt','a')
+            except:
+                flog=open('Basalt_log.txt','w')
+            flog.write(error_msg+'\n')
+            flog.close()
+            raise RuntimeError(error_msg)
 
         CC_binset_list, CC_contig_list, binset_coverage_dict, binset_coverage_total, total_core_contigs =[], [], {}, {}, {}
         for i in range(0, len(BestBinSet_list)):
