@@ -8,20 +8,69 @@ summary statistics for downstream evaluation.
 """
 
 from Bio import SeqIO
-import sys, os, threading, copy
+import sys, os, threading, copy, subprocess
 from multiprocessing import Pool
 import pandas as pd
 import numpy as np
 from sklearn.decomposition import PCA
 
+
+def _run_blast_db_and_query(query_fasta, db_fasta, blast_output, num_threads,
+                            logfile='temp_db.txt', evalue='1e-20'):
+    """
+    Build a BLAST database from ``db_fasta`` and query it with ``query_fasta``.
+
+    Absolute paths are used so the result does not depend on the current
+    working directory.
+    """
+    query_abs = os.path.abspath(query_fasta)
+    db_abs = os.path.abspath(db_fasta)
+    output_abs = os.path.abspath(blast_output)
+    logfile_abs = os.path.abspath(logfile)
+
+    for fasta in (query_abs, db_abs):
+        if not os.path.exists(fasta):
+            raise RuntimeError('Required FASTA file is missing for BLAST: '+str(fasta))
+        if os.path.getsize(fasta) == 0:
+            raise RuntimeError('Required FASTA file is empty for BLAST: '+str(fasta))
+
+    subprocess.run([
+        'makeblastdb',
+        '-in', db_abs,
+        '-dbtype', 'nucl',
+        '-hash_index',
+        '-parse_seqids',
+        '-logfile', logfile_abs,
+    ], check=True)
+
+    blast_db_found = False
+    for suffix in ('.nhr', '.nin', '.nsq', '.ndb', '.ntf', '.nto'):
+        if os.path.exists(db_abs + suffix):
+            blast_db_found = True
+            break
+    if not blast_db_found:
+        raise RuntimeError('BLAST database was not created for '+str(db_abs))
+
+    subprocess.run([
+        'blastn',
+        '-query', query_abs,
+        '-db', db_abs,
+        '-evalue', str(evalue),
+        '-outfmt', '6',
+        '-num_threads', str(num_threads),
+        '-out', output_abs,
+    ], check=True)
+
+    if not os.path.exists(output_abs):
+        raise RuntimeError('BLAST output file was not created: '+str(output_abs))
+
+    return output_abs
+
 def Contigs_aligner(Contigs_assembly1, num_threads):
     print('Using BLAST to align '+Contigs_assembly1+' to '+Contigs_assembly1)
-    try:
-        blast_output=str(Contigs_assembly1)+'_vs_'+str(Contigs_assembly1)+'.txt'
-        os.system('makeblastdb -in '+str(Contigs_assembly1)+' -dbtype nucl -hash_index -parse_seqids -logfile temp_db.txt')
-        os.system('blastn -query '+str(Contigs_assembly1)+' -db '+str(Contigs_assembly1)+' -evalue 1e-20 -outfmt 6 -num_threads '+str(num_threads)+' -out '+str(blast_output))
-    except:
-        print('Alignment error! Please check whether BLAST+ is installed in your system')
+    blast_output=str(Contigs_assembly1)+'_vs_'+str(Contigs_assembly1)+'.txt'
+    _run_blast_db_and_query(Contigs_assembly1, Contigs_assembly1, blast_output,
+                            num_threads, 'temp_db.txt', '1e-20')
     
     blast_output2=open('Filtrated_'+str(Contigs_assembly1)+'_vs_'+str(Contigs_assembly1)+'.txt','w')
     record_result = {}
@@ -2333,8 +2382,10 @@ def binset_comparitor(binset1, binset2, coverage1, coverage2, binset_coverage_to
     except:
         print('bin_comparison_folder existed')
 
-    f_assem1=open('Merge_binset1_contigs.fa','w')
-    f_assem1_red=open('Merge_binset1_contigs_redudant.fa','w')
+    merge_binset1_path = os.path.join(pwd, 'Merge_binset1_contigs.fa')
+    merge_binset1_red_path = os.path.join(pwd, 'Merge_binset1_contigs_redudant.fa')
+    f_assem1=open(merge_binset1_path,'w')
+    f_assem1_red=open(merge_binset1_red_path,'w')
     os.chdir(str(pwd)+'/'+binset1)
     bin_num, n, contig_len, change_id, seq_de_r = {}, 0, {}, {}, {}
     for bin1 in bins_binset1.keys():
@@ -2353,10 +2404,13 @@ def binset_comparitor(binset1, binset2, coverage1, coverage2, binset_coverage_to
             #     seq_id=str(record.id)
             contig_len[record.id]=len(record.seq)
     f_assem1.close()
+    f_assem1_red.close()
     os.chdir(pwd)
 
-    f_assem2=open('Merge_binset2_contigs.fa','w')
-    f_assem2_red=open('Merge_binset2_contigs_redudant.fa','w')
+    merge_binset2_path = os.path.join(pwd, 'Merge_binset2_contigs.fa')
+    merge_binset2_red_path = os.path.join(pwd, 'Merge_binset2_contigs_redudant.fa')
+    f_assem2=open(merge_binset2_path,'w')
+    f_assem2_red=open(merge_binset2_red_path,'w')
     os.chdir(str(pwd)+'/'+binset2)
     bin_num, n = {}, 0
     for bin2 in bins_binset2.keys():
@@ -2375,6 +2429,7 @@ def binset_comparitor(binset1, binset2, coverage1, coverage2, binset_coverage_to
             #     seq_id=str(record.id)
             contig_len[record.id]=len(record.seq)
     f_assem2.close()
+    f_assem2_red.close()
     os.chdir(pwd)
 
     contigs_coverage={}
@@ -2410,17 +2465,27 @@ def binset_comparitor(binset1, binset2, coverage1, coverage2, binset_coverage_to
                 contigs_coverage[str(ids)][i]=str(line).strip().split('\t')[3*i+1]
                 i+=1
 
-    try:
-        os.system('makeblastdb -in Merge_binset1_contigs.fa -dbtype nucl -hash_index -parse_seqids -logfile temp_db.txt')
-    except:
-        os.system('makeblastdb -in Merge_binset1_contigs.fa -dbtype nucl -logfile temp_db.txt')
-    
-    os.system('blastn -db Merge_binset1_contigs.fa -query Merge_binset2_contigs.fa -outfmt 6 -out binset2_vs_binset1.txt -num_threads '+str(num_threads))
+    if os.path.getsize(merge_binset1_path) == 0 or os.path.getsize(merge_binset2_path) == 0:
+        raise RuntimeError(
+            'Merged binset contig FASTA is empty before BLAST comparison: '
+            + str(merge_binset1_path) + ' / ' + str(merge_binset2_path)
+        )
 
-    blast_output=open('Filtrated_binset2_vs_binset1.txt','w')
+    blast_hits_path = os.path.join(pwd, 'binset2_vs_binset1.txt')
+    filtrated_blast_path = os.path.join(pwd, 'Filtrated_binset2_vs_binset1.txt')
+    _run_blast_db_and_query(
+        merge_binset2_path,
+        merge_binset1_path,
+        blast_hits_path,
+        num_threads,
+        os.path.join(pwd, 'temp_db.txt'),
+        '1e-20',
+    )
+
+    blast_output=open(filtrated_blast_path,'w')
     bin1_cov_ave, bin2_cov_ave, bins_blast_file = {}, {}, {}
     # contig_num = 0
-    for line in open('binset2_vs_binset1.txt','r'):
+    for line in open(blast_hits_path,'r'):
         simi=str(line).strip().split('\t')[2]
         if float(simi) >= 99:
             length=eval(str(line).strip().split('\t')[3])
