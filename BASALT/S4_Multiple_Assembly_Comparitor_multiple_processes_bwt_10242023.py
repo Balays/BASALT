@@ -143,6 +143,8 @@ def core_contigs_filtration(bin_contig_cov, bin_contig, contig_cov,
     print('Filtrating core contigs')
 
     core_contigs, core_contigs_IQR, core_contigs_IQR_coverage, core_contigs_IQR_ave_coverage ={}, {}, {}, {}
+    bin_num_coverage = {}
+    max_num_coverage = 0
     for bin in bin_contig_cov.keys():
         print('Processing '+str(bin))
         core_contigs[bin]={}
@@ -154,6 +156,7 @@ def core_contigs_filtration(bin_contig_cov, bin_contig, contig_cov,
         ### Filtration of contigs
         print(str(len(bin_contig_cov[bin]))+' contigs')
         cov_index_total_num, cov_index={}, {}
+        num_coverage = 0
         for item in bin_contig_cov[bin].keys():  
             num_coverage=len(bin_contig_cov[bin][item])
             for i in range(0, num_coverage):
@@ -191,6 +194,9 @@ def core_contigs_filtration(bin_contig_cov, bin_contig, contig_cov,
             except:
                 print('No sufficient number of contigs for IQR calculation')
 
+        bin_num_coverage[bin] = num_coverage
+        if num_coverage > max_num_coverage:
+            max_num_coverage = num_coverage
 
         for i in range(1, num_coverage+1):
             core_contigs_IQR_coverage[bin][i]=0
@@ -225,13 +231,13 @@ def core_contigs_filtration(bin_contig_cov, bin_contig, contig_cov,
         for bin_id in core_contigs2.keys():
             for contigs in core_contigs2[bin_id].keys():
                 ftest.write(str(bin_id)+'\t'+str(contigs)+'\t'+str(core_contigs2[bin_id][contigs])+'\n')
-                if core_contigs2[bin_id][contigs] != num_coverage:
+                if core_contigs2[bin_id][contigs] != bin_num_coverage.get(bin_id, 0):
                     del core_contigs[bin_id][contigs]
         ftest.close()
 
         for bin_id in core_contigs_IQR2.keys():
             for contigs in core_contigs_IQR2[bin_id].keys():
-                if core_contigs_IQR2[bin_id][contigs] != num_coverage:
+                if core_contigs_IQR2[bin_id][contigs] != bin_num_coverage.get(bin_id, 0):
                     del core_contigs_IQR[bin_id][contigs]
     except:
         print('No sufficient number of contigs for IQR calculation')
@@ -242,6 +248,7 @@ def core_contigs_filtration(bin_contig_cov, bin_contig, contig_cov,
         core_contigs2[bin_id]={}
         core_contigs_IQR2[bin_id]={}
         coverage_data, contigs_ids, coverage_list, num_contig={}, [], [], 0
+        num_coverage = 0
         for contig in bin_contig_cov[bin_id].keys():
             num_contig+=1
             contigs_ids.append(contig)
@@ -251,6 +258,9 @@ def core_contigs_filtration(bin_contig_cov, bin_contig, contig_cov,
                     coverage_data[i]=[]
                 coverage_data[i].append(bin_contig_cov[bin_id][contig][i])
                 coverage_list.append(bin_contig_cov[bin_id][contig][i])
+        bin_num_coverage[bin_id] = num_coverage
+        if num_coverage > max_num_coverage:
+            max_num_coverage = num_coverage
 
         try:
             coverage_array=np.array(coverage_list).reshape((num_contig,num_coverage))
@@ -281,7 +291,7 @@ def core_contigs_filtration(bin_contig_cov, bin_contig, contig_cov,
 
     for bin_id in core_contigs_IQR2.keys():
         for contigs in core_contigs_IQR2[bin_id].keys():
-            for i in range(1, num_coverage+1):
+            for i in range(1, bin_num_coverage.get(bin_id, 0)+1):
                 core_contigs_IQR_coverage[bin_id][i]+=contig_cov[contigs][i]
     
     for bin_id in core_contigs_IQR_coverage.keys():
@@ -294,7 +304,7 @@ def core_contigs_filtration(bin_contig_cov, bin_contig, contig_cov,
     f=open(str(folder_binset)+'_bins_coverage.txt','w')
     i=1
     a='Bin'
-    while i <= int(num_coverage):
+    while i <= int(max_num_coverage):
         a+='\t'+'Coverage'+str(i)
         i+=1
     f.write(str(a)+'\n')
