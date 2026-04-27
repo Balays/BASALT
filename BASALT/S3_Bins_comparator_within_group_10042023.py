@@ -14,6 +14,7 @@ from Bio import SeqIO
 from S2_BinsAbundance_PE_connections_multiple_processes_pool_10032023 import *
 import copy
 import os
+import shutil
 
 FASTA_SUFFIXES = ('.fa', '.fasta', '.fna', '.fas', '.fsa')
 
@@ -66,6 +67,60 @@ def _resolve_bin_filename(folder, bin_id):
 
         if file_base.endswith('.' + target_base.split('.')[-1]):
             return file
+    return None
+
+
+def _resolve_bin_path(folder, bin_id):
+    """
+    Resolve a bin FASTA to an absolute path, searching recursively if needed.
+
+    Some BASALT binner outputs keep the FASTA bins one level deeper than the
+    top-level ``*_genomes`` folder, and the quality reports still reference
+    them by the fully qualified ``<binset>_genomes.<id>`` form. The late S3
+    rerun path needs the actual file path, not just the logical bin ID.
+    """
+    if not os.path.isdir(folder):
+        return None
+
+    candidate_path = os.path.join(folder, bin_id)
+    if os.path.isfile(candidate_path):
+        return candidate_path
+
+    candidate_name = _resolve_bin_filename(folder, bin_id)
+    if candidate_name is not None:
+        candidate_path = os.path.join(folder, candidate_name)
+        if os.path.isfile(candidate_path):
+            return candidate_path
+
+    target_base = _strip_fasta_suffix(bin_id)
+    target_suffix = None
+    if '_genomes.' in target_base:
+        target_suffix = target_base.split('_genomes.')[-1]
+    target_suffix_unpadded = None
+    if target_suffix is not None and target_suffix.isdigit():
+        target_suffix_unpadded = str(int(target_suffix))
+
+    for root, dirs, files in os.walk(folder):
+        for file in files:
+            if not _is_fasta_file(file):
+                continue
+
+            file_base = _strip_fasta_suffix(file)
+            if file_base == target_base:
+                return os.path.join(root, file)
+
+            if target_suffix is not None:
+                if file_base == target_suffix:
+                    return os.path.join(root, file)
+                if target_suffix_unpadded is not None and file_base == target_suffix_unpadded:
+                    return os.path.join(root, file)
+                if file_base.endswith('.' + target_suffix) or file_base.endswith('_' + target_suffix):
+                    return os.path.join(root, file)
+                if target_suffix_unpadded is not None and (
+                    file_base.endswith('.' + target_suffix_unpadded)
+                    or file_base.endswith('_' + target_suffix_unpadded)
+                ):
+                    return os.path.join(root, file)
     return None
 
 
@@ -411,12 +466,11 @@ def two_groups_comparator(assembly, binset1, binset2, num):
         try:
             folder=item.split('_genomes.')[0]
             source_folder = pwd+'/'+folder+'_genomes'
-            os.chdir(source_folder)
-            bin_file = _resolve_bin_filename(source_folder, item)
-            if bin_file is None:
+            bin_path = _resolve_bin_path(source_folder, item)
+            if bin_path is None:
                 print('Copy bin-set error! Missing FASTA for '+str(item)+' in '+str(source_folder))
                 continue
-            os.system('cp '+bin_file+' '+pwd+'/Iteration_'+str(num)+'_genomes')
+            shutil.copy2(bin_path, os.path.join(pwd, 'Iteration_'+str(num)+'_genomes'))
             copied_bins += 1
         except:
             print('Copy bin-set error!')
