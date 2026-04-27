@@ -46,6 +46,19 @@ def _resolve_bin_filename(folder, bin_id):
     return None
 
 
+def _is_legacy_singlecontig_zero_bin(bin_id):
+    """
+    Match the historical placeholder-style ``*_genomes.0`` bins only.
+
+    Older BASALT code used the broad substring check ``'_genomes.0' in id``,
+    which also matches normal zero-padded IDs like ``*_genomes.001`` and
+    silently drops most real bins. We only want to exclude the exact
+    ``..._genomes.0`` placeholder case here.
+    """
+    base = _strip_fasta_suffix(bin_id)
+    return base.endswith('_genomes.0') and '_semibin_genomes.0' not in base
+
+
 def contig_id_recorder(genome_folder):
     """
     Record contig IDs and lengths for all bins in a genome folder list.
@@ -76,18 +89,16 @@ def contig_id_recorder(genome_folder):
             for root, dirs, files in os.walk(item+'_genomes'):
                 os.chdir(item+'_genomes')
                 for file in files:
-                    if '_genomes.' in file:
-                        if _is_fasta_file(file):
-                            # print('Parsing', file
-                            bins1.append(file)
-                            genomes_sum[item][file]={}
-                            genomes_sum[item][file]['contig']={}
-                            bin_len[file]=0
-                            for record in SeqIO.parse(file, 'fasta'):
-                                bin_len[file]+=len(record.seq)
-                                genomes_sum[item][file]['contig'][record.id]=len(record.seq)
-                        else:
-                            continue
+                    if _is_fasta_file(file):
+                        bins1.append(file)
+                        genomes_sum[item][file]={}
+                        genomes_sum[item][file]['contig']={}
+                        bin_len[file]=0
+                        for record in SeqIO.parse(file, 'fasta'):
+                            bin_len[file]+=len(record.seq)
+                            genomes_sum[item][file]['contig'][record.id]=len(record.seq)
+                    else:
+                        continue
             os.chdir(pwd)
         else:
             for root, dirs, files in os.walk(item+'_genomes'):
@@ -178,13 +189,13 @@ def checkm(genome_folder):
                 n+=1
                 if n >= 2:
                     genome_ids=str(line).strip().split('\t')[0]
-                    if '_genomes.0' not in genome_ids:
+                    if not _is_legacy_singlecontig_zero_bin(genome_ids):
                         bins_checkm[genome_ids]={}
                         bins_checkm[genome_ids]['Completeness']=float(str(line).strip().split('\t')[2].strip())
                         bins_checkm[genome_ids]['Genome size']=int(str(line).strip().split('\t')[1].strip())
                         bins_checkm[genome_ids]['N50']=float(str(line).strip().split('\t')[4].strip())
                         bins_checkm[genome_ids]['Contamination']=float(str(line).strip().split('\t')[3].strip())
-                    elif '_semibin_genomes.0' in genome_ids:
+                    elif '_semibin_genomes.0' in _strip_fasta_suffix(genome_ids):
                         bins_checkm[genome_ids]={}
                         bins_checkm[genome_ids]['Completeness']=float(str(line).strip().split('\t')[2].strip())
                         bins_checkm[genome_ids]['Genome size']=int(str(line).strip().split('\t')[1].strip())
@@ -202,7 +213,7 @@ def checkm(genome_folder):
             n=0
             for line in f:
                 n+=1
-                if n >= 2 and '_genomes.0' not in str(line).strip().split('\t')[0]:
+                if n >= 2 and not _is_legacy_singlecontig_zero_bin(str(line).strip().split('\t')[0]):
                     bins_checkm[str(line).strip().split('\t')[0]]['Connections']=int(str(line).strip().split('\t')[1])
         except:
             print('Please make sure Bins_total_connections_'+str(item)+'.txt under the folder.')
