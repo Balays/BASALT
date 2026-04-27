@@ -40,8 +40,31 @@ def _resolve_bin_filename(folder, bin_id):
         return bin_id
 
     target_base = _strip_fasta_suffix(bin_id)
+    target_suffix = None
+    if '_genomes.' in target_base:
+        target_suffix = target_base.split('_genomes.')[-1]
+    target_suffix_unpadded = None
+    if target_suffix is not None and target_suffix.isdigit():
+        target_suffix_unpadded = str(int(target_suffix))
+
     for file in os.listdir(folder):
-        if _is_fasta_file(file) and _strip_fasta_suffix(file) == target_base:
+        if not _is_fasta_file(file):
+            continue
+
+        file_base = _strip_fasta_suffix(file)
+        if file_base == target_base:
+            return file
+
+        # Some BASALT outputs store bins as bare numeric FASTAs such as
+        # ``001.fa`` or ``1.fasta`` while the quality report uses the fully
+        # qualified ``<binset>_genomes.001`` identifier. Match those too.
+        if target_suffix is not None:
+            if file_base == target_suffix:
+                return file
+            if target_suffix_unpadded is not None and file_base == target_suffix_unpadded:
+                return file
+
+        if file_base.endswith('.' + target_base.split('.')[-1]):
             return file
     return None
 
