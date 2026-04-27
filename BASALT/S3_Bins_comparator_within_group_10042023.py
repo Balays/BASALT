@@ -12,7 +12,38 @@ bins for each group.
 from tempfile import TemporaryFile
 from Bio import SeqIO
 from S2_BinsAbundance_PE_connections_multiple_processes_pool_10032023 import *
+import copy
 import os
+
+FASTA_SUFFIXES = ('.fa', '.fasta', '.fna', '.fas', '.fsa')
+
+
+def _is_fasta_file(filename):
+    lower = filename.lower()
+    return any(lower.endswith(suffix) for suffix in FASTA_SUFFIXES)
+
+
+def _strip_fasta_suffix(filename):
+    lower = filename.lower()
+    for suffix in FASTA_SUFFIXES:
+        if lower.endswith(suffix):
+            return filename[:-len(suffix)]
+    return os.path.splitext(filename)[0]
+
+
+def _resolve_bin_filename(folder, bin_id):
+    if not os.path.isdir(folder):
+        return None
+
+    candidate_path = os.path.join(folder, bin_id)
+    if os.path.isfile(candidate_path):
+        return bin_id
+
+    target_base = _strip_fasta_suffix(bin_id)
+    for file in os.listdir(folder):
+        if _is_fasta_file(file) and _strip_fasta_suffix(file) == target_base:
+            return file
+    return None
 
 
 def contig_id_recorder(genome_folder):
@@ -46,8 +77,7 @@ def contig_id_recorder(genome_folder):
                 os.chdir(item+'_genomes')
                 for file in files:
                     if '_genomes.' in file:
-                        hz=file.split('.')[-1]
-                        if hz == 'fa':
+                        if _is_fasta_file(file):
                             # print('Parsing', file
                             bins1.append(file)
                             genomes_sum[item][file]={}
@@ -64,8 +94,7 @@ def contig_id_recorder(genome_folder):
                 os.chdir(item+'_genomes')
                 bins2=[]
                 for file in files:
-                    hz=file.split('.')[-1]
-                    if hz == 'fa':
+                    if _is_fasta_file(file):
                         bins2.append(file)
                         bin_len[file]=0
                         for record in SeqIO.parse(file, 'fasta'):
@@ -303,7 +332,7 @@ def two_groups_comparator(assembly, binset1, binset2, num):
 
     f=open('Best_bin_set_iteration_'+str(num)+'.txt','w')
     for item in bin_selected.keys():
-        f.write(item+'.fa'+'\t'+str(bin_selected[item])+'\n')
+        f.write(item+'\t'+str(bin_selected[item])+'\n')
 
     if len(bins_extract) >= 1:
         for item in bins_extract:
@@ -337,11 +366,15 @@ def two_groups_comparator(assembly, binset1, binset2, num):
 
     for item in bin_selected.keys():
         f.write(item+'\t'+str(bin_set_checkm[item]['Genome size'])+'\t'+str(bin_set_checkm[item]['Completeness'])+'\t'+str(bin_set_checkm[item]['Contamination'])+'\t'+str(bin_set_checkm[item]['N50'])+'\n')
-        bin=item+'.fa'
         try:
             folder=item.split('_genomes.')[0]
-            os.chdir(pwd+'/'+folder+'_genomes')
-            os.system('cp '+bin+' '+pwd+'/Iteration_'+str(num)+'_genomes')
+            source_folder = pwd+'/'+folder+'_genomes'
+            os.chdir(source_folder)
+            bin_file = _resolve_bin_filename(source_folder, item)
+            if bin_file is None:
+                print('Copy bin-set error! Missing FASTA for '+str(item)+' in '+str(source_folder))
+                continue
+            os.system('cp '+bin_file+' '+pwd+'/Iteration_'+str(num)+'_genomes')
         except:
             print('Copy bin-set error!')
     f.close()  
@@ -381,8 +414,8 @@ def bin_within_a_group_comparitor(binset, assembly, num):
     for root, dirs, files in os.walk(binset):
         os.chdir(binset)
         for file in files:
-            hz=str(file).split('.')
-            if hz == 'fa':
+            hz=file.split('.')[-1].lower()
+            if hz in ('fa', 'fasta', 'fna', 'fas', 'fsa'):
                 bins_sum[file]={}
                 bins_sum[file]['contig']={}
                 bins_sum[file]['totallen']=0
@@ -418,7 +451,9 @@ def bin_within_a_group_comparitor(binset, assembly, num):
             contamination=float(str(line).strip().split('\t')[3].strip())
             N50=float(str(line).strip().split('\t')[4].strip())
             genome_size=int(str(line).strip().split('\t')[1].strip())
-            bin_id=ids+'.fa'
+            bin_id = _resolve_bin_filename(os.path.join(pwd, binset), ids)
+            if bin_id is None:
+                bin_id = ids+'.fa'
             final_iteration_checkm[bin_id]={'Completeness': completeness, 'Genome size': genome_size, 'N50': N50, 'Contamination': contamination}
 
     os.chdir(pwd)
@@ -446,6 +481,7 @@ def bin_within_a_group_comparitor(binset, assembly, num):
     f.close()
     f2.close()
 
+    original_final_iteration_checkm=copy.deepcopy(final_iteration_checkm)
     remain_bin, del_bin={}, {}
     for item in pos_bins.keys():
         set1=str(item).split('---')[0]
@@ -480,6 +516,10 @@ def bin_within_a_group_comparitor(binset, assembly, num):
         else:
             continue
 
+    if len(final_iteration_checkm) == 0 and len(original_final_iteration_checkm) != 0:
+        final_iteration_checkm=copy.deepcopy(original_final_iteration_checkm)
+        print('Final iteration selection removed every bin for '+str(assembly)+'. Restoring the pre-filter candidate set.')
+
     bin_selected={}
     f=open(assembly+'_BestBinSet_quality_report.tsv','w')
     f.write('Bin_ID'+'\t'+'Genome_size'+'\t'+'Completeness'+'\t'+'Contamination'+'\t'+'N50'+'\n')
@@ -493,20 +533,42 @@ def bin_within_a_group_comparitor(binset, assembly, num):
         bin_selected[checkm_id]=0
     f.close()
 
+    selected_bin_files={}
+    expected_selected={_strip_fasta_suffix(item): item for item in final_iteration_checkm.keys()}
     os.chdir(pwd+'/'+'Iteration_'+str(num)+'_genomes')
     for root, dirs, files in os.walk(pwd+'/'+'Iteration_'+str(num)+'_genomes'):
         for file in files:
-            if file in final_iteration_checkm.keys():
-                os.system('cp '+file+' '+pwd+'/'+str(assembly)+'_BestBinsSet')
+            if _is_fasta_file(file):
+                file_base=_strip_fasta_suffix(file)
+                if file_base in expected_selected.keys():
+                    selected_bin_files[file]=expected_selected[file_base]
+                    os.system('cp '+file+' '+pwd+'/'+str(assembly)+'_BestBinsSet')
 
     os.chdir(pwd+'/'+str(assembly)+'_BestBinsSet')
     f3=open(str(assembly)+'_BestBinsSet.depth.txt','w')
     f4=open('prebinned_genomes_output_for_dataframe_'+str(assembly)+'_BestBinsSet.txt','w')
     f5=open('Genome_group_all_list_'+str(assembly)+'_BestBinsSet.txt','w')
 
+    if len(selected_bin_files) == 0:
+        print('No selected FASTA bins were copied into '+str(assembly)+'_BestBinsSet')
+        fallback_selected={_strip_fasta_suffix(item): item for item in original_final_iteration_checkm.keys()}
+        os.chdir(pwd+'/'+'Iteration_'+str(num)+'_genomes')
+        for root, dirs, files in os.walk(pwd+'/'+'Iteration_'+str(num)+'_genomes'):
+            for file in files:
+                if _is_fasta_file(file):
+                    file_base=_strip_fasta_suffix(file)
+                    if file_base in fallback_selected.keys():
+                        selected_bin_files[file]=fallback_selected[file_base]
+                        os.system('cp '+file+' '+pwd+'/'+str(assembly)+'_BestBinsSet')
+        os.chdir(pwd+'/'+str(assembly)+'_BestBinsSet')
+        if len(selected_bin_files) != 0:
+            final_iteration_checkm=copy.deepcopy(original_final_iteration_checkm)
+            print('Fallback copied '+str(len(selected_bin_files))+' FASTA bin(s) into '+str(assembly)+'_BestBinsSet')
+
     binset_folders={}
-    for item in final_iteration_checkm.keys():
-        binset_folders[item.split('_genomes.')[0]]=0
+    for item in selected_bin_files.keys():
+        if '_genomes.' in item:
+            binset_folders[item.split('_genomes.')[0]]=0
 
     print('----------------------------')
     print('Parsing bins in best bin-set')
@@ -515,7 +577,7 @@ def bin_within_a_group_comparitor(binset, assembly, num):
         for file in files:
             if '_genomes.' in file:
                 hz=str(file).split('_genomes.')[1]
-                if '.fa' in hz:
+                if _is_fasta_file(hz):
                     for record in SeqIO.parse(file, 'fasta'):
                         contig_bin[record.id]=str(file)
 
@@ -596,7 +658,9 @@ def binset_filtration(binset):
                     n+=1
                     if n >= 2:
                         bin_id=str(line).strip().split('\t')[0]
-                        bin_id_f=bin_id+'.fa'
+                        bin_id_f=_resolve_bin_filename(pwd+'/'+binset, bin_id)
+                        if bin_id_f is None:
+                            bin_id_f=bin_id+'.fa'
                         bin_checkm.append(bin_id_f)
 
                         try:
@@ -613,8 +677,7 @@ def binset_filtration(binset):
                             del_bin.append(bin_id_f)
             
         for file in files:
-            hz=file.split('.')[-1]
-            if 'fa' in hz:
+            if _is_fasta_file(file):
                 if file not in bin_checkm:
                     del_bin.append(file)
             else:
@@ -685,9 +748,15 @@ def bins_comparator_multiple_groups(genome_folder, assembly):
         i+=1
         os.system('rm -rf Iteration_'+str(i)+'_genomes')
 
+    bestbinset = str(assembly)+'_BestBinsSet'
     num2=num+1
     if str(num2) not in finished_step:
         bestbinset=bin_within_a_group_comparitor('Iteration_'+str(num)+'_genomes', str(assembly), num)    
+    elif not os.path.isdir(bestbinset):
+        raise RuntimeError(
+            'Expected existing best-binset folder is missing after S3 checkpoint resume: '
+            + str(bestbinset)
+        )
     
     os.system('rm -rf Iteration_'+str(num)+'_genomes')
     os.system('mkdir '+str(assembly)+'_comparison_files')

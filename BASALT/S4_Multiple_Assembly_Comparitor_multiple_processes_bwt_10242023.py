@@ -16,6 +16,36 @@ import numpy as np
 from sklearn.decomposition import PCA
 import glob
 
+FASTA_SUFFIXES = ('.fa', '.fasta', '.fna', '.fas', '.fsa')
+
+
+def _is_fasta_file(filename):
+    lower = filename.lower()
+    return any(lower.endswith(suffix) for suffix in FASTA_SUFFIXES)
+
+
+def _strip_fasta_suffix(filename):
+    lower = filename.lower()
+    for suffix in FASTA_SUFFIXES:
+        if lower.endswith(suffix):
+            return filename[:-len(suffix)]
+    return os.path.splitext(filename)[0]
+
+
+def _quality_aliases(bin_id):
+    base = _strip_fasta_suffix(bin_id)
+    primary = base.split('.')[0].split('_')[0]
+    aliases = {bin_id, base, primary}
+    for suffix in FASTA_SUFFIXES:
+        aliases.add(base + suffix)
+        aliases.add(primary + suffix)
+    return aliases
+
+
+def _store_bin_quality(mapping, bin_id, quality):
+    for alias in _quality_aliases(bin_id):
+        mapping[alias] = copy.deepcopy(quality)
+
 
 def _run_blast_db_and_query(query_fasta, db_fasta, blast_output, num_threads,
                             logfile='temp_db.txt', evalue='1e-20'):
@@ -1071,16 +1101,18 @@ def checkm_connections(binset):
                 for line in open(file, 'r'):
                     n+=1
                     if n >= 2:
-                        bin_id=str(line).strip().split('\t')[0]+'.fa'
-                        binset_checkm_connection[str(bin_id)]={}
+                        bin_id=str(line).strip().split('\t')[0]
                         genome_size=str(line).strip().split('\t')[1].strip()
                         completeness=str(line).strip().split('\t')[2].strip()
                         contamination=str(line).strip().split('\t')[3].strip()
                         N50=str(line).strip().split('\t')[4].strip()
-                        binset_checkm_connection[str(bin_id)]['N50']=float(N50)
-                        binset_checkm_connection[str(bin_id)]['Completeness']=float(completeness)
-                        binset_checkm_connection[str(bin_id)]['Genome size']=int(genome_size)
-                        binset_checkm_connection[str(bin_id)]['Contamination']=float(contamination)
+                        quality = {
+                            'N50': float(N50),
+                            'Completeness': float(completeness),
+                            'Genome size': int(genome_size),
+                            'Contamination': float(contamination),
+                        }
+                        _store_bin_quality(binset_checkm_connection, bin_id, quality)
     os.chdir(pwd)
     print('Done of reading checkm output of '+binset)
     print('-----------------------------------------')
@@ -1553,19 +1585,13 @@ def parse_checkm(file):
         n+=1
         if n >= 2:
             bin_id=str(line).strip().split('\t')[0]
-            bin_id_f=bin_id+'.fa'
-            bin_id_f3=bin_id.split('.')[0].split('_')[0]+'.fa'
-            bin_checkm[bin_id_f]={}
-            bin_checkm[bin_id_f]['Completeness']=float(str(line).strip().split('\t')[2])
-            bin_checkm[bin_id_f]['Genome size']=float(str(line).strip().split('\t')[1])
-            bin_checkm[bin_id_f]['Contamination']=float(str(line).strip().split('\t')[3])
-            bin_checkm[bin_id_f]['N50']=float(str(line).strip().split('\t')[4])
-
-            bin_checkm[bin_id_f3]={}
-            bin_checkm[bin_id_f3]['Completeness']=float(str(line).strip().split('\t')[2])
-            bin_checkm[bin_id_f3]['Genome size']=float(str(line).strip().split('\t')[1])
-            bin_checkm[bin_id_f3]['Contamination']=float(str(line).strip().split('\t')[3])
-            bin_checkm[bin_id_f3]['N50']=float(str(line).strip().split('\t')[4])
+            quality = {
+                'Completeness': float(str(line).strip().split('\t')[2]),
+                'Genome size': float(str(line).strip().split('\t')[1]),
+                'Contamination': float(str(line).strip().split('\t')[3]),
+                'N50': float(str(line).strip().split('\t')[4]),
+            }
+            _store_bin_quality(bin_checkm, bin_id, quality)
 
     return bin_checkm
 
@@ -1856,13 +1882,14 @@ def initial_drep_final_comparitor(final_iteration_folder,
                     n+=1
                     if n >= 2:
                         bin_id=str(line).strip().split('\t')[0]
-                        bin_id_f=bin_id+'.fa'
                         bin_checkm_o[bin_id]=str(line).strip()
-                        bin_checkm[bin_id_f]={}
-                        bin_checkm[bin_id_f]['Completeness']=float(str(line).strip().split('\t')[2])
-                        bin_checkm[bin_id_f]['Genome size']=float(str(line).strip().split('\t')[1])
-                        bin_checkm[bin_id_f]['N50']=float(str(line).strip().split('\t')[4])
-                        bin_checkm[bin_id_f]['Contamination']=float(str(line).strip().split('\t')[3])
+                        quality = {
+                            'Completeness': float(str(line).strip().split('\t')[2]),
+                            'Genome size': float(str(line).strip().split('\t')[1]),
+                            'N50': float(str(line).strip().split('\t')[4]),
+                            'Contamination': float(str(line).strip().split('\t')[3]),
+                        }
+                        _store_bin_quality(bin_checkm, bin_id, quality)
     os.chdir(pwd)
     
     os.system('mv Similar_bin_in_final_iteration.txt Highly_possible_similar_bin_in_final_iteration.txt '+str(output_folder_name))
@@ -2285,13 +2312,14 @@ def final_binset_comparitor(final_iteration_folder,
                     n+=1
                     if n >= 2:
                         bin_id=str(line).strip().split('\t')[0]
-                        bin_id_f=bin_id+'.fa'
                         bin_checkm_o[bin_id]=str(line).strip()
-                        bin_checkm[bin_id_f]={}
-                        bin_checkm[bin_id_f]['Completeness']=float(str(line).strip().split('\t')[2])
-                        bin_checkm[bin_id_f]['Genome size']=float(str(line).strip().split('\t')[1])
-                        bin_checkm[bin_id_f]['N50']=float(str(line).strip().split('\t')[4])
-                        bin_checkm[bin_id_f]['Contamination']=float(str(line).strip().split('\t')[3])
+                        quality = {
+                            'Completeness': float(str(line).strip().split('\t')[2]),
+                            'Genome size': float(str(line).strip().split('\t')[1]),
+                            'N50': float(str(line).strip().split('\t')[4]),
+                            'Contamination': float(str(line).strip().split('\t')[3]),
+                        }
+                        _store_bin_quality(bin_checkm, bin_id, quality)
     os.chdir(pwd)
 
     #os.system('mv Similar_bin_in_final_iteration.txt Highly_possible_similar_bin_in_final_iteration.txt '+str(output_folder_name))
@@ -2451,21 +2479,21 @@ def record_bin_coverage(best_binset_from_multi_assemblies, coverage_file):
     pwd=os.getcwd()
 
     #### In some cases, the program accidently stops, causing the bins num in checkm file low that the bins on the folder
-    bin_checkm_temp=[]
+    bin_checkm_temp=set()
     os.chdir(pwd+'/'+str(best_binset_from_multi_assemblies))
     for root, dirs, files in os.walk(pwd+'/'+str(best_binset_from_multi_assemblies)):
         for file in files:
             if 'quality_report.tsv' in file:
                 for line in open(file, 'r'):
                     bins=str(line).strip().split('\t')[0]
-                    bin_checkm_temp.append(bins+'.fa')
-                    # bin_checkm_temp.append(bins+'.fasta')
+                    if bins == 'Bin_ID':
+                        continue
+                    bin_checkm_temp.add(_strip_fasta_suffix(bins))
     
     for root, dirs, files in os.walk(pwd+'/'+str(best_binset_from_multi_assemblies)):
         for file in files:
-            hz=file.split('.')[-1]
-            if 'fa' in hz or 'fna' in hz:
-                if str(file) not in bin_checkm_temp:
+            if _is_fasta_file(file):
+                if _strip_fasta_suffix(file) not in bin_checkm_temp:
                     os.system('rm '+str(file))
     os.chdir(pwd)
     ####
@@ -2486,8 +2514,7 @@ def record_bin_coverage(best_binset_from_multi_assemblies, coverage_file):
             # except:
             #     hz=file.split('.')[-1]
 
-            hz=file.split('.')[-1]
-            if 'fa' in hz or 'fna' in hz:
+            if _is_fasta_file(file):
                 m+=1
                 bin_contigs[file]={}
                 bin_contigs_mock[file]={}
