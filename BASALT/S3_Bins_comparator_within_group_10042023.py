@@ -247,12 +247,8 @@ def genome_selector(best_hit_genome, bin_set_checkm):
     for item in best_hit_genome.keys():
         set1=str(best_hit_genome[item]).split('\t')[0].split('---')[0]
         set2=str(best_hit_genome[item]).split('\t')[0].split('---')[1]
-        genome_name_list1=set1.split('.')
-        genome_name_list2=set2.split('.')
-        genome_name_list1.remove(genome_name_list1[-1])
-        genome_name_list2.remove(genome_name_list2[-1])
-        set1='.'.join(genome_name_list1)
-        set2='.'.join(genome_name_list2)
+        set1=_strip_fasta_suffix(set1)
+        set2=_strip_fasta_suffix(set2)
 
         set1_cpn=bin_set_checkm[set1]['Completeness']
         set2_cpn=bin_set_checkm[set2]['Completeness']
@@ -335,6 +331,19 @@ def two_groups_comparator(assembly, binset1, binset2, num):
     f.close()
 
     bin_selected=genome_selector(best_hit_genome, bin_set_checkm)
+    if len(bin_selected) == 0 and len(bin_set_checkm) != 0:
+        print(
+            'No bins were selected in iteration '
+            + str(num)
+            + '. Restoring all candidate bins for downstream selection.'
+        )
+        fx.write(
+            'No bins were selected in iteration '
+            + str(num)
+            + '. Restoring all candidate bins for downstream selection.\n'
+        )
+        for item in bin_set_checkm.keys():
+            bin_selected[item]='fallback candidate from '+binset1+' and '+binset2
     
     f=open('Extract_bins_in_iteration_'+str(num)+'.txt', 'w')
     for item in bins_extract:
@@ -347,9 +356,7 @@ def two_groups_comparator(assembly, binset1, binset2, num):
 
     if len(bins_extract) >= 1:
         for item in bins_extract:
-            item_list=item .split('.')
-            item_list.remove(item_list[-1])
-            name='.'.join(item_list)
+            name=_strip_fasta_suffix(item)
 
             f.write(item+'\t'+str(bin_set_checkm[name])+'\n')
             bin_selected[name]='unique genome in', binset2
@@ -375,6 +382,7 @@ def two_groups_comparator(assembly, binset1, binset2, num):
     f2=open('Iteration_'+str(num)+'_genomes/Bins_total_connections_Iteration_'+str(num)+'.txt','w')
     f2.write('Bin'+'\t'+'Total_connections'+'\n')
 
+    copied_bins=0
     for item in bin_selected.keys():
         f.write(item+'\t'+str(bin_set_checkm[item]['Genome size'])+'\t'+str(bin_set_checkm[item]['Completeness'])+'\t'+str(bin_set_checkm[item]['Contamination'])+'\t'+str(bin_set_checkm[item]['N50'])+'\n')
         try:
@@ -386,10 +394,18 @@ def two_groups_comparator(assembly, binset1, binset2, num):
                 print('Copy bin-set error! Missing FASTA for '+str(item)+' in '+str(source_folder))
                 continue
             os.system('cp '+bin_file+' '+pwd+'/Iteration_'+str(num)+'_genomes')
+            copied_bins += 1
         except:
             print('Copy bin-set error!')
     f.close()  
     f2.close()
+    print(
+        'Copied '
+        + str(copied_bins)
+        + ' bin FASTA file(s) into Iteration_'
+        + str(num)
+        + '_genomes'
+    )
 
     os.chdir(pwd)
     fx.write(binset1+' and '+binset2+' comparison done'+'\n')
