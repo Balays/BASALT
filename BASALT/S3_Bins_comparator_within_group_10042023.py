@@ -181,6 +181,72 @@ def _resolve_bin_path(folder, bin_id):
     return None
 
 
+def _resolve_checkm_key(checkm_table, bin_id):
+    """
+    Resolve relation keys back to the CheckM table key for the same bin.
+
+    The recovered rerun path can mix equivalent names such as ``.fa``,
+    ``.fasta``, ``10`` and ``10.0``. Keep the biological bin identity stable
+    before S3 decides which duplicate to remove.
+    """
+    if bin_id in checkm_table:
+        return bin_id
+
+    target_base = _strip_fasta_suffix(bin_id)
+    target_prefix, target_token = _split_qualified_bin_id(target_base)
+    for key in checkm_table.keys():
+        key_base = _strip_fasta_suffix(key)
+        if key_base == target_base:
+            return key
+
+        key_prefix, key_token = _split_qualified_bin_id(key_base)
+        if (
+            target_prefix is not None
+            and key_prefix is not None
+            and target_prefix == key_prefix
+            and _numeric_tokens_equivalent(target_token, key_token)
+        ):
+            return key
+
+    return None
+
+
+def _resolve_checkm_entry(checkm_table, bin_id):
+    """
+    Return a stable ``(key, row)`` pair from a CheckM table.
+
+    Recovered workspaces can mix equivalent aliases such as ``.fa``,
+    ``.fasta``, bare ``.0`` IDs and fully qualified ``*_genomes.0`` IDs.
+    Most of S3 only needs the resolved row and should not crash when one
+    alias is missing while an equivalent row exists under another spelling.
+    """
+    key = _resolve_checkm_key(checkm_table, bin_id)
+    if key is None:
+        return None, None
+
+    row = checkm_table.get(key)
+    if row is not None:
+        return key, row
+
+    target_base = _strip_fasta_suffix(key)
+    target_prefix, target_token = _split_qualified_bin_id(target_base)
+    for candidate_key, candidate_row in checkm_table.items():
+        candidate_base = _strip_fasta_suffix(candidate_key)
+        if candidate_base == target_base:
+            return candidate_key, candidate_row
+
+        candidate_prefix, candidate_token = _split_qualified_bin_id(candidate_base)
+        if (
+            target_prefix is not None
+            and candidate_prefix is not None
+            and target_prefix == candidate_prefix
+            and _numeric_tokens_equivalent(target_token, candidate_token)
+        ):
+            return candidate_key, candidate_row
+
+    return None, None
+
+
 def _copy_selected_bins_from_source(selected_items, pwd, destination_folder):
     """
     Copy selected bins into a BestBinsSet directly from their source folders.
@@ -417,26 +483,29 @@ def genome_selector(best_hit_genome, bin_set_checkm):
     for item in best_hit_genome.keys():
         set1=str(best_hit_genome[item]).split('\t')[0].split('---')[0]
         set2=str(best_hit_genome[item]).split('\t')[0].split('---')[1]
-        set1=_strip_fasta_suffix(set1)
-        set2=_strip_fasta_suffix(set2)
+        set1, set1_row = _resolve_checkm_entry(bin_set_checkm, _strip_fasta_suffix(set1))
+        set2, set2_row = _resolve_checkm_entry(bin_set_checkm, _strip_fasta_suffix(set2))
+        if set1 is None or set2 is None or set1_row is None or set2_row is None:
+            print('Skipping best-hit pair with missing CheckM row: '+str(best_hit_genome[item]))
+            continue
 
-        set1_cpn=bin_set_checkm[set1]['Completeness']
-        set2_cpn=bin_set_checkm[set2]['Completeness']
-        set1_ctn=bin_set_checkm[set1]['Contamination']
-        set2_ctn=bin_set_checkm[set2]['Contamination']
+        set1_cpn=set1_row['Completeness']
+        set2_cpn=set2_row['Completeness']
+        set1_ctn=set1_row['Contamination']
+        set2_ctn=set2_row['Contamination']
 
         set1_cpn_ctn=float(set1_cpn)-float(set1_ctn)
         set2_cpn_ctn=float(set2_cpn)-float(set2_ctn)
         if float(set1_cpn_ctn) == float(set2_cpn_ctn):
-            if float(bin_set_checkm[set1]['Genome size']) > float(bin_set_checkm[set2]['Genome size']):
-                bin_selected[set1]=best_hit_genome[item]+'\t'+str(bin_set_checkm[set1])+'\t'+str(bin_set_checkm[set2])
+            if float(set1_row['Genome size']) > float(set2_row['Genome size']):
+                bin_selected[set1]=best_hit_genome[item]+'\t'+str(set1_row)+'\t'+str(set2_row)
             else:
-                bin_selected[set2]=best_hit_genome[item]+'\t'+str(bin_set_checkm[set1])+'\t'+str(bin_set_checkm[set2])
+                bin_selected[set2]=best_hit_genome[item]+'\t'+str(set1_row)+'\t'+str(set2_row)
 
         elif float(set1_cpn_ctn) > float(set2_cpn_ctn):
-            bin_selected[set1]=best_hit_genome[item]+'\t'+str(bin_set_checkm[set1])+'\t'+str(bin_set_checkm[set2])
+            bin_selected[set1]=best_hit_genome[item]+'\t'+str(set1_row)+'\t'+str(set2_row)
         else:
-            bin_selected[set2]=best_hit_genome[item]+'\t'+str(bin_set_checkm[set1])+'\t'+str(bin_set_checkm[set2])
+            bin_selected[set2]=best_hit_genome[item]+'\t'+str(set1_row)+'\t'+str(set2_row)
 
     print('bin-selecting accomplished!')
     print('---------------------------')
@@ -526,9 +595,12 @@ def two_groups_comparator(assembly, binset1, binset2, num):
 
     if len(bins_extract) >= 1:
         for item in bins_extract:
-            name=_strip_fasta_suffix(item)
+            name, checkm_row = _resolve_checkm_entry(bin_set_checkm, _strip_fasta_suffix(item))
+            if name is None or checkm_row is None:
+                print('Skipping extracted bin with missing CheckM row: '+str(item))
+                continue
 
-            f.write(item+'\t'+str(bin_set_checkm[name])+'\n')
+            f.write(item+'\t'+str(checkm_row)+'\n')
             bin_selected[name]='unique genome in', binset2
             print(item+' unique genome in '+binset2)
             print('----------------')
@@ -671,8 +743,16 @@ def bin_within_a_group_comparitor(binset, assembly, num):
         sim=float(relation[item]) + float(relation2[item])
         if sim >= 100 or float(relation[item]) >= 50 or float(relation2[item]) >= 50:
         # if sim >= 120 or float(relation[item]) >= 80 or float(relation2[item]) >= 80:
-            f2.write(item+'\t'+str(relation[item])+'\t'+str(relation2[item])+'\t'+str(final_iteration_checkm[str(item).split('---')[0]])+'\t'+str(final_iteration_checkm[str(item).split('---')[1]])+'\n')
-            pos_bins[item]=str(relation[item])+'\t'+str(relation2[item])
+            set1_raw=str(item).split('---')[0]
+            set2_raw=str(item).split('---')[1]
+            set1=_resolve_checkm_key(final_iteration_checkm, set1_raw)
+            set2=_resolve_checkm_key(final_iteration_checkm, set2_raw)
+            if set1 is None or set2 is None:
+                print('Skipping similar-bin relation with missing CheckM row: '+str(item))
+                continue
+            normalized_item=set1+'---'+set2
+            f2.write(normalized_item+'\t'+str(relation[item])+'\t'+str(relation2[item])+'\t'+str(final_iteration_checkm[set1])+'\t'+str(final_iteration_checkm[set2])+'\n')
+            pos_bins[normalized_item]=str(relation[item])+'\t'+str(relation2[item])
 
     f.close()
     f2.close()
