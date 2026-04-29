@@ -14,6 +14,7 @@ from Bio import SeqIO
 from S2_BinsAbundance_PE_connections_multiple_processes_pool_10032023 import *
 import copy
 import os
+import re
 import shutil
 
 FASTA_SUFFIXES = ('.fa', '.fasta', '.fna', '.fas', '.fsa')
@@ -29,7 +30,39 @@ def _strip_fasta_suffix(filename):
     for suffix in FASTA_SUFFIXES:
         if lower.endswith(suffix):
             return filename[:-len(suffix)]
-    return os.path.splitext(filename)[0]
+    # BASALT bin IDs commonly end with numeric tokens such as
+    # ``_genomes.0`` or ``_genomes.10.0``. ``os.path.splitext`` would treat
+    # those tokens as extensions and erase the actual bin ID.
+    return filename
+
+
+def _parse_numeric_value(value):
+    try:
+        return float(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def _numeric_tokens_equivalent(left, right):
+    left_num = _parse_numeric_value(left)
+    right_num = _parse_numeric_value(right)
+    if left_num is None or right_num is None:
+        return False
+    return left_num == right_num
+
+
+def _split_qualified_bin_id(bin_base):
+    """
+    Split ``<binset>_genomes.<id>`` into its prefix and numeric/string token.
+
+    Recovered CONCOCT folders can preserve cluster IDs as ``10.0`` while BASALT
+    later refers to the same bin as ``10`` in quality reports. Comparing the
+    ``_genomes.`` prefix separately lets us treat those IDs as equivalent.
+    """
+    if '_genomes.' not in bin_base:
+        return None, None
+    prefix, suffix = bin_base.split('_genomes.', 1)
+    return prefix + '_genomes.', suffix
 
 
 def _resolve_bin_filename(folder, bin_id):
@@ -47,6 +80,7 @@ def _resolve_bin_filename(folder, bin_id):
     target_suffix_unpadded = None
     if target_suffix is not None and target_suffix.isdigit():
         target_suffix_unpadded = str(int(target_suffix))
+    target_prefix, target_token = _split_qualified_bin_id(target_base)
 
     for file in os.listdir(folder):
         if not _is_fasta_file(file):
@@ -56,6 +90,15 @@ def _resolve_bin_filename(folder, bin_id):
         if file_base == target_base:
             return file
 
+        file_prefix, file_token = _split_qualified_bin_id(file_base)
+        if (
+            target_prefix is not None
+            and file_prefix is not None
+            and target_prefix == file_prefix
+            and _numeric_tokens_equivalent(target_token, file_token)
+        ):
+            return file
+
         # Some BASALT outputs store bins as bare numeric FASTAs such as
         # ``001.fa`` or ``1.fasta`` while the quality report uses the fully
         # qualified ``<binset>_genomes.001`` identifier. Match those too.
@@ -63,6 +106,8 @@ def _resolve_bin_filename(folder, bin_id):
             if file_base == target_suffix:
                 return file
             if target_suffix_unpadded is not None and file_base == target_suffix_unpadded:
+                return file
+            if _numeric_tokens_equivalent(file_base, target_suffix):
                 return file
 
         if file_base.endswith('.' + target_base.split('.')[-1]):
@@ -99,6 +144,7 @@ def _resolve_bin_path(folder, bin_id):
     target_suffix_unpadded = None
     if target_suffix is not None and target_suffix.isdigit():
         target_suffix_unpadded = str(int(target_suffix))
+    target_prefix, target_token = _split_qualified_bin_id(target_base)
 
     for root, dirs, files in os.walk(folder):
         for file in files:
@@ -109,10 +155,21 @@ def _resolve_bin_path(folder, bin_id):
             if file_base == target_base:
                 return os.path.join(root, file)
 
+            file_prefix, file_token = _split_qualified_bin_id(file_base)
+            if (
+                target_prefix is not None
+                and file_prefix is not None
+                and target_prefix == file_prefix
+                and _numeric_tokens_equivalent(target_token, file_token)
+            ):
+                return os.path.join(root, file)
+
             if target_suffix is not None:
                 if file_base == target_suffix:
                     return os.path.join(root, file)
                 if target_suffix_unpadded is not None and file_base == target_suffix_unpadded:
+                    return os.path.join(root, file)
+                if _numeric_tokens_equivalent(file_base, target_suffix):
                     return os.path.join(root, file)
                 if file_base.endswith('.' + target_suffix) or file_base.endswith('_' + target_suffix):
                     return os.path.join(root, file)
@@ -122,6 +179,41 @@ def _resolve_bin_path(folder, bin_id):
                 ):
                     return os.path.join(root, file)
     return None
+
+
+def _copy_selected_bins_from_source(selected_items, pwd, destination_folder):
+    """
+    Copy selected bins into a BestBinsSet directly from their source folders.
+
+    The late S3 path historically tried to materialize ``*_BestBinsSet`` from
+    the transient ``Iteration_*_genomes`` folder. That staging folder can be
+    incomplete after recovery or partial reruns even when the original
+    ``*_genomes`` folders contain the selected bins. Copying directly from the
+    source bin folders keeps the selection logic aligned with the quality
+    reports and preserves fully qualified BASALT bin names in the destination.
+    """
+    copied = {}
+    for item in selected_items:
+        source_id = _strip_fasta_suffix(item)
+        if '_genomes.' not in source_id:
+            continue
+
+        source_folder = os.path.join(pwd, source_id.split('_genomes.')[0] + '_genomes')
+        bin_path = _resolve_bin_path(source_folder, source_id)
+        if bin_path is None:
+            bin_path = _resolve_bin_path(source_folder, item)
+        if bin_path is None:
+            print('BestBinsSet copy error! Missing FASTA for '+str(source_id)+' in '+str(source_folder))
+            continue
+
+        suffix = os.path.splitext(bin_path)[1]
+        if suffix.lower() not in FASTA_SUFFIXES:
+            suffix = '.fa'
+        destination_name = source_id + suffix
+        shutil.copy2(bin_path, os.path.join(destination_folder, destination_name))
+        copied[destination_name] = source_id
+
+    return copied
 
 
 def _is_legacy_singlecontig_zero_bin(bin_id):
@@ -637,16 +729,11 @@ def bin_within_a_group_comparitor(binset, assembly, num):
         bin_selected[checkm_id]=0
     f.close()
 
-    selected_bin_files={}
-    expected_selected={_strip_fasta_suffix(item): item for item in final_iteration_checkm.keys()}
-    os.chdir(pwd+'/'+'Iteration_'+str(num)+'_genomes')
-    for root, dirs, files in os.walk(pwd+'/'+'Iteration_'+str(num)+'_genomes'):
-        for file in files:
-            if _is_fasta_file(file):
-                file_base=_strip_fasta_suffix(file)
-                if file_base in expected_selected.keys():
-                    selected_bin_files[file]=expected_selected[file_base]
-                    os.system('cp '+file+' '+pwd+'/'+str(assembly)+'_BestBinsSet')
+    selected_bin_files = _copy_selected_bins_from_source(
+        final_iteration_checkm.keys(),
+        pwd,
+        os.path.join(pwd, str(assembly)+'_BestBinsSet')
+    )
 
     os.chdir(pwd+'/'+str(assembly)+'_BestBinsSet')
     f3=open(str(assembly)+'_BestBinsSet.depth.txt','w')
@@ -655,22 +742,18 @@ def bin_within_a_group_comparitor(binset, assembly, num):
 
     if len(selected_bin_files) == 0:
         print('No selected FASTA bins were copied into '+str(assembly)+'_BestBinsSet')
-        fallback_selected={_strip_fasta_suffix(item): item for item in original_final_iteration_checkm.keys()}
-        os.chdir(pwd+'/'+'Iteration_'+str(num)+'_genomes')
-        for root, dirs, files in os.walk(pwd+'/'+'Iteration_'+str(num)+'_genomes'):
-            for file in files:
-                if _is_fasta_file(file):
-                    file_base=_strip_fasta_suffix(file)
-                    if file_base in fallback_selected.keys():
-                        selected_bin_files[file]=fallback_selected[file_base]
-                        os.system('cp '+file+' '+pwd+'/'+str(assembly)+'_BestBinsSet')
+        selected_bin_files = _copy_selected_bins_from_source(
+            original_final_iteration_checkm.keys(),
+            pwd,
+            os.path.join(pwd, str(assembly)+'_BestBinsSet')
+        )
         os.chdir(pwd+'/'+str(assembly)+'_BestBinsSet')
         if len(selected_bin_files) != 0:
             final_iteration_checkm=copy.deepcopy(original_final_iteration_checkm)
             print('Fallback copied '+str(len(selected_bin_files))+' FASTA bin(s) into '+str(assembly)+'_BestBinsSet')
 
     binset_folders={}
-    for item in selected_bin_files.keys():
+    for item in selected_bin_files.values():
         if '_genomes.' in item:
             binset_folders[item.split('_genomes.')[0]]=0
 
