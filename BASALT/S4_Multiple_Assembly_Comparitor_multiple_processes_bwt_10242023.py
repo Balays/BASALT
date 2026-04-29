@@ -29,7 +29,9 @@ def _strip_fasta_suffix(filename):
     for suffix in FASTA_SUFFIXES:
         if lower.endswith(suffix):
             return filename[:-len(suffix)]
-    return os.path.splitext(filename)[0]
+    # BASALT bin IDs often end in numeric tokens like ``_genomes.0``.
+    # ``os.path.splitext`` would mistake those tokens for file extensions.
+    return filename
 
 
 def _quality_aliases(bin_id):
@@ -637,11 +639,15 @@ def genome_contigs_recorder(binset, binset_record, binset_genome_size,
         if n1 == 1:
             num=str(line).strip().count('drange')
         else:
-            ids=str(line).strip().split('\t')[0]
+            fields=str(line).strip().split('\t')
+            if len(fields) < (3 * int(num) + 2):
+                print('Skipping malformed coverage row in '+str(coverage_matrix)+': '+str(line).strip())
+                continue
+            ids=fields[0]
             bins_coverage[str(ids)]={}
             i=1
             while i <= int(num):
-                bins_coverage[str(ids)][i]=str(line).strip().split('\t')[3*i+1]
+                bins_coverage[str(ids)][i]=fields[3*i+1]
                 i+=1
 
     for root, dirs, files in os.walk(binset):
@@ -676,10 +682,13 @@ def genome_contigs_recorder(binset, binset_record, binset_genome_size,
                         else:
                             binset_record[str(binset)][str(record.id)].append(str(file))
                     
-                        i=1
-                        while i <= int(num):
-                            binset_coverage[file][i]+=float(bins_coverage[str(record.id)][i])
-                            i+=1
+                        if str(record.id) not in bins_coverage:
+                            print('Missing coverage for contig '+str(record.id)+' in '+str(coverage_matrix)+'; using zero coverage')
+                        else:
+                            i=1
+                            while i <= int(num):
+                                binset_coverage[file][i]+=float(bins_coverage[str(record.id)][i])
+                                i+=1
                 
                     if 'noclass' not in file and 'unbined' not in file:
                         all_bins[file]=1
@@ -713,10 +722,13 @@ def genome_contigs_recorder(binset, binset_record, binset_genome_size,
                         else:
                             binset_record[str(binset)][str(record.id)].append(str(file))
                     
-                        i=1
-                        while i <= int(num):
-                            binset_coverage[file][i]+=float(bins_coverage[str(record.id)][i])
-                            i+=1
+                        if str(record.id) not in bins_coverage:
+                            print('Missing coverage for contig '+str(record.id)+' in '+str(coverage_matrix)+'; using zero coverage')
+                        else:
+                            i=1
+                            while i <= int(num):
+                                binset_coverage[file][i]+=float(bins_coverage[str(record.id)][i])
+                                i+=1
                 
                     if 'noclass' not in file and 'unbined' not in file:
                         all_bins[file]=1
@@ -2655,11 +2667,15 @@ def binset_comparitor(binset1, binset2, coverage1, coverage2,
             # try:
             #     ids=str(line).strip().split('\t')[0].split('|')[0] ### ids needs to be eltered 
             # except:
-            ids=str(line).strip().split('\t')[0]
+            fields=str(line).strip().split('\t')
+            if len(fields) < (3*int(num)+2):
+                print('Skipping malformed coverage row in '+str(coverage1)+': '+str(line).strip())
+                continue
+            ids=fields[0]
             contigs_coverage[str(ids)]={}
             i=1
             while i <= int(num):
-                contigs_coverage[str(ids)][i]=str(line).strip().split('\t')[3*i+1]
+                contigs_coverage[str(ids)][i]=fields[3*i+1]
                 i+=1
 
     n1=0
@@ -2671,11 +2687,15 @@ def binset_comparitor(binset1, binset2, coverage1, coverage2,
             # try:
             #     ids=str(line).strip().split('\t')[0].split('|')[0]  ### ids needs to be eltered 
             # except:
-            ids=str(line).strip().split('\t')[0]
+            fields=str(line).strip().split('\t')
+            if len(fields) < (3*int(num)+2):
+                print('Skipping malformed coverage row in '+str(coverage2)+': '+str(line).strip())
+                continue
+            ids=fields[0]
             contigs_coverage[str(ids)]={}
             i=1
             while i <= int(num):
-                contigs_coverage[str(ids)][i]=str(line).strip().split('\t')[3*i+1]
+                contigs_coverage[str(ids)][i]=fields[3*i+1]
                 i+=1
 
     if os.path.getsize(merge_binset1_path) == 0 or os.path.getsize(merge_binset2_path) == 0:
