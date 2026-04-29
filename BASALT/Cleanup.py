@@ -5,6 +5,7 @@ Helper utilities for cleaning up intermediate BASALT files.
 """
 
 import glob
+import fnmatch
 import os
 import shutil
 
@@ -27,9 +28,76 @@ def _remove_path(path):
             pass
 
 
-def _remove_patterns(base_dir, patterns):
+def _is_preserved_pipeline_state(path):
+    """
+    Return True for artifacts that a later BASALT stage, resume, or recovery
+    may need even if a broad scratch glob happens to match them.
+    """
+    name = os.path.basename(os.path.normpath(path))
+    if not name:
+        return False
+
+    preserved_patterns = [
+        '*_genomes',
+        '*_BestBinsSet',
+        '*_BestBinset',
+        '*_comparison_files',
+        '*_checkm',
+        '*_checkm2',
+        'BestBinset*',
+        'Final_binset*',
+        'Final_bestbinset*',
+        'Data_feeded*',
+        'Coverage_matrix_*',
+        '*.depth.txt',
+        '*_assembly.depth.txt',
+        'Connections_*',
+        'Connections_total_dict.txt',
+        'Combat_*',
+        'condense_connections_*.txt',
+        'Basalt_checkpoint.txt',
+        'Autobinner_checkpoint.txt',
+        'De-rep_checkpoint.txt',
+        'BASALT_command.txt',
+        'Basalt_log.txt',
+        '*_list.txt',
+        'PE_r1_*',
+        'PE_r2_*',
+        '*quality_report*.tsv',
+        '*_quality_report.tsv',
+        '*_contigs_summary.txt',
+        'prebinned_genomes_output_for_dataframe_*.txt',
+        'Bins_change_ID_*.txt',
+        'Bins_total_connections_*.txt',
+        'Genome_*.txt',
+        'Deep_retrieved_bins*',
+        'coverage_deep_refined_bins*',
+        'TNFs_deep_refined_bins*',
+        'S6_coverage_filtration_matrix*',
+        'S6_TNF_filtration_matrix*',
+        'Merged_seqs_*',
+        '*_deep_retrieval*',
+        '*_MP_1',
+        '*_MP_2',
+        '*_gf_lr*',
+        '*_long_read',
+        '*_sr_bins_seq',
+        '*_lr_bins_seq',
+        'Polish_*',
+        'Remained_seq*',
+        'Remapping*',
+        'Re-mapped_depth.txt',
+        'Total_contigs_after_OLC_reassembly.fa',
+        'Hybrid_re-assembly_status.txt',
+    ]
+    return any(fnmatch.fnmatch(name, pattern) for pattern in preserved_patterns)
+
+
+def _remove_patterns(base_dir, patterns, preserve_pipeline_state=False):
     for pattern in patterns:
         for path in glob.glob(os.path.join(base_dir, pattern)):
+            if preserve_pipeline_state and _is_preserved_pipeline_state(path):
+                continue
             _remove_path(path)
 
 
@@ -171,7 +239,16 @@ def cleanup_redundant_short_read_inputs(original_reads, modified_reads):
 
 def cleanup(assembly_list):
     """
-    Remove intermediate index/coverage files and archive key matrices.
+    Remove only disposable scratch files from a completed BASALT run.
+
+    This cleanup is intentionally conservative.  Downstream BASALT stages and
+    checkpoint resumes still need bin FASTAs, best-bin folders, coverage
+    matrices, comparison files, retrieval/reassembly folders, checkpoints,
+    logs, and PE-tracking read copies. Earlier cleanup code archived and
+    removed those files, which made later steps unrecoverable without
+    rebuilding bins. This function saves space by removing regenerable
+    alignment/index/temp outputs while leaving all pipeline state needed for a
+    complete run or resume in place.
 
     Parameters
     ----------
@@ -180,38 +257,54 @@ def cleanup(assembly_list):
     """
     if not cleanup_enabled():
         return
-    os.system('rm *.njs *.ndb *.nto *.ntf *.not *.nos')
-    os.mkdir('Coverage_depth_connection_SimilarBin_files_backup')
-    os.system(
-        'mv *.depth.txt Coverage_matrix_* Combat_* condense_connections_* '
-        'Connections_* Similar_bins.txt Coverage_depth_connection_SimilarBin_files_backup'
+
+    scratch_patterns = [
+        '*.sam',
+        '*.bam',
+        '*.bai',
+        '*.bt2',
+        '*.bt2l',
+        '*.njs',
+        '*.ndb',
+        '*.nto',
+        '*.ntf',
+        '*.not',
+        '*.nos',
+        '*.nhr',
+        '*.nin',
+        '*.nsq',
+        '*.nog',
+        '*.nsd',
+        '*.nsi',
+        '*.nhd',
+        '*.nhi',
+        'temp.orfs.*',
+        'temp_db.txt',
+        '*.tmp',
+    ]
+    scratch_dirs = [
+        '*_kmer',
+        'bin_coverage',
+        'Bin_coverage_after_contamination_removal',
+        'bin_comparison_folder',
+        'bin_extract-eleminated-selected_contig',
+        'Bins_blast_output',
+        'split_blast_output',
+        'SPAdes_corrected_reads',
+        'Concoct_*',
+    ]
+
+    _remove_patterns(
+        os.getcwd(),
+        scratch_patterns + scratch_dirs,
+        preserve_pipeline_state=True,
     )
-    os.system(
-        'tar -zcvf Coverage_depth_connection_SimilarBin_files_backup.tar.gz '
-        'Coverage_depth_connection_SimilarBin_files_backup'
-    )
-    os.system('rm -rf Coverage_depth_connection_SimilarBin_files_backup')
-    os.system('rm -rf *_kmer bin_coverage Bin_coverage_after_contamination_removal bin_comparison_folder bin_extract-eleminated-selected_contig Bins_blast_output')
-    os.system('tar -zcvf Group_comparison_files.tar.gz *_comparison_files')
-    os.system('tar -zcvf Group_Bestbinset.tar.gz *_BestBinsSet')
-    # os.system('tar -zcvf Group_checkm.tar.gz *_checkm')
-    os.system('tar -zcvf Group_genomes.tar.gz *_genomes')
-    os.system('rm -rf *_sr_bins_seq')
-    os.system('tar -zcvf Binsets_backup.tar.gz BestBinse*') ###
-    os.system('rm -rf *_comparison_files *_checkm *_genomes *_BestBinset *_BestBinsSet BestBinse* Deep_retrieved_bins coverage_deep_refined_bins S6_coverage_filtration_matrix S6_TNF_filtration_matrix split_blast_output TNFs_deep_refined_bins')
-    os.system('rm *_checkpoint.txt')
-    os.system('rm -rf Merged_seqs_*')
-    os.system('rm -rf *.bt2 Outlier_in_threshold* Summary_threshold* Refined_total_bins_contigs.fa Total_bins.fa') 
-    for i in range(1,20):
-        os.system('rm -rf *_deep_retrieval_'+str(i))
-    os.system('rm -rf *_MP_1 *_MP_2 *_gf_lr_polished *_gf_lr *_gf_lr_mod *_gf_lr_checkm *_long_read')
-    os.system('rm Bin_reads_summary.txt Depth_total.txt Basalt_log.txt Assembly_mo_list.txt Assembly_MoDict.txt *_gf_lr_blasted.txt Bestbinset_list.txt Bin_extract_contigs_after_coverage_filtration.txt Bin_lw.txt Bin_record_error.txt')
-    os.system('rm Bins_folder.txt BLAST_output_error.txt Concoct_* condensed.cytoscape* cytoscape.*')
-    os.system('rm Hybrid_re-assembly_status.txt Mapping_log_* OLC_merged_error_blast_results.txt Potential_contaminted_seq_vari.txt Reassembled_bins_comparison.txt Rejudge_clean.txt')
-    os.system('rm Remained_seq* Remapped_depth_test.txt Re-mapped_depth.txt Remapping.fasta TNFs_exceptional_contigs.txt Total_contigs_after_OLC_reassembly.fa')
-    os.system('rm PE_r1_* PE_r2_*')
-    for i in range(1, len(assembly_list)+1):
-        os.system('rm '+str(i)+'_'+str(assembly_list[i-1]))
+
+    # Keep these required state families uncompressed and in-place:
+    # *_genomes, *_BestBinsSet, BestBinset*, *_comparison_files, *_checkm,
+    # Coverage_matrix_*, *.depth.txt, Connections_*, Combat_*, checkpoints,
+    # retrieval/reassembly folders, list files, logs, PE_r1_*, PE_r2_*,
+    # and numbered assembly FASTAs.
 
 if __name__ == '__main__':
     assembly_list=['8_medium_S001_SPAdes_scaffolds.fasta','10_medium_cat_SPAdes_scaffolds.fasta']

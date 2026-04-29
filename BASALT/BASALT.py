@@ -80,9 +80,9 @@ parser.add_argument('-b', '--binsets-list', type=str, dest='binsets_list',
 parser.add_argument('--min-free-gb', type=float, dest='min_free_gb', default=10.0,
                     help='Abort BASALT if free disk space drops to this threshold or below (default: 10 GB). Set to 0 to disable.')
 parser.add_argument('--cleanup', dest='cleanup_enabled', action='store_true', default=True,
-                    help='Enable BASALT cleanup of intermediate files (default: enabled).')
+                    help='Enable safe BASALT cleanup of disposable scratch files while preserving downstream/resume state (default: enabled).')
 parser.add_argument('--no-cleanup', dest='cleanup_enabled', action='store_false',
-                    help='Disable BASALT cleanup and keep intermediate files for debugging or recovery.')
+                    help='Disable even safe cleanup and keep all intermediate files for debugging or recovery.')
 
 args = parser.parse_args()
 assemblies=args.assemblies

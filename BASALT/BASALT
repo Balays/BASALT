@@ -76,6 +76,10 @@ parser.add_argument('-c', '--coverage-list', type=str, dest='coverage_list',
                     help='List of depth file for refinement. Coverage file(s) could be generated from data feeding modole. e.g.: -c Coverage_matrix_for_binning_1_assembly.fa.txt,Coverage_matrix_for_binning_2_assembly.fa.txt')
 parser.add_argument('-b', '--binsets-list', type=str, dest='binsets_list',
                     help='List of binsets for de-replication. Binset depth file(s) could be generated from data feeding modole. e.g.: -b 1_assembly_BestBinsSet,2_assembly_BestBinsSet')
+parser.add_argument('--cleanup', dest='cleanup_enabled', action='store_true', default=True,
+                    help='Enable safe BASALT cleanup of disposable scratch files while preserving downstream/resume state (default: enabled).')
+parser.add_argument('--no-cleanup', dest='cleanup_enabled', action='store_false',
+                    help='Disable even safe cleanup and keep all intermediate files for debugging or recovery.')
 
 args = parser.parse_args()
 assemblies=args.assemblies
@@ -101,6 +105,9 @@ binsetindex=args.extra_binset_start_index
 refinement_binset=args.refinement_binset
 coverage_list=args.coverage_list
 binsets_list=args.binsets_list
+cleanup_enabled=args.cleanup_enabled
+
+os.environ['BASALT_CLEANUP_ENABLED'] = '1' if cleanup_enabled else '0'
 
 # ---------------------------------------------------------------------------
 # Parse and normalize input lists
@@ -294,4 +301,3 @@ else:
                 pe='y'
 
                 data_feeding(data_feeding_folder, datasets, binsetindex, num_threads, output_folder, QC_software, pe)
-
