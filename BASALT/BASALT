@@ -80,6 +80,8 @@ parser.add_argument('--cleanup', dest='cleanup_enabled', action='store_true', de
                     help='Enable safe BASALT cleanup of disposable scratch files while preserving downstream/resume state (default: enabled).')
 parser.add_argument('--no-cleanup', dest='cleanup_enabled', action='store_false',
                     help='Disable even safe cleanup and keep all intermediate files for debugging or recovery.')
+parser.add_argument('--skip-semibin', dest='skip_semibin', action='store_true', default=False,
+                    help='Skip SemiBin2 during autobinning; useful when SemiBin2 is unavailable and will be backfilled later.')
 
 args = parser.parse_args()
 assemblies=args.assemblies
@@ -106,8 +108,10 @@ refinement_binset=args.refinement_binset
 coverage_list=args.coverage_list
 binsets_list=args.binsets_list
 cleanup_enabled=args.cleanup_enabled
+skip_semibin=args.skip_semibin
 
 os.environ['BASALT_CLEANUP_ENABLED'] = '1' if cleanup_enabled else '0'
+os.environ['BASALT_SKIP_SEMIBIN'] = '1' if skip_semibin else os.environ.get('BASALT_SKIP_SEMIBIN', '0')
 
 # ---------------------------------------------------------------------------
 # Parse and normalize input lists

@@ -24,6 +24,33 @@ from Cleanup import (
     cleanup_semibin_workspace,
 )
 
+_SEMIBIN_ENABLED_CACHE = None
+
+
+def semibin_enabled():
+    """
+    Return whether SemiBin2 should be run during BASALT autobinning.
+
+    ``BASALT_SKIP_SEMIBIN=1`` lets a workspace finish the rest of autobinning
+    on machines where SemiBin2 is unavailable. SemiBin can then be backfilled
+    later with ``scripts/rerun_basalt_semibin.py``.
+    """
+    global _SEMIBIN_ENABLED_CACHE
+    if _SEMIBIN_ENABLED_CACHE is not None:
+        return _SEMIBIN_ENABLED_CACHE
+
+    value = str(os.environ.get('BASALT_SKIP_SEMIBIN', '0')).strip().lower()
+    if value in ('1', 'true', 'yes', 'on'):
+        _SEMIBIN_ENABLED_CACHE = False
+        return _SEMIBIN_ENABLED_CACHE
+    if shutil.which('SemiBin2') is None:
+        print('[WARN] SemiBin2 not found on PATH; skipping SemiBin2 for this BASALT autobinning run.')
+        _SEMIBIN_ENABLED_CACHE = False
+        return _SEMIBIN_ENABLED_CACHE
+    _SEMIBIN_ENABLED_CACHE = True
+    return _SEMIBIN_ENABLED_CACHE
+
+
 def fq2fa_conversion(filename):
     """
     Convert a FASTQ file into a FASTA file using Biopython.
@@ -1821,8 +1848,11 @@ def autobinner_main(assembly_list, datasets, lr, hifi_list, insert_size, num_thr
             print('Performing Semibin2')
             # if len(depth_file_list) == 1:
             semibin2_list=[]
+            run_semibin2 = semibin_enabled()
+            if not run_semibin2:
+                print('Skipping SemiBin2; other BASALT autobinners will continue.')
             # bam_sorted='x y'
-            if len(lr) != 0 or len(hifi_list) != 0:
+            if run_semibin2 and (len(lr) != 0 or len(hifi_list) != 0):
                 semibin_folder_name=str(group)+'_'+assembly+'_100_semibin_genomes'
                 if semibin_folder_name not in binning_ds.keys():
                     os.system('SemiBin2 single_easy_bin -i '+str(group)+'_'+assembly+' -b '+str(bam_sorted)+' -o '+str(group)+'_'+assembly+'_100_semibin_genomes --sequencing-type=long_read --processes '+str(num_threads))
@@ -1845,7 +1875,7 @@ def autobinner_main(assembly_list, datasets, lr, hifi_list, insert_size, num_thr
                 #             f=open('Autobinner_checkpoint.txt','a')
                 #             f.write('Binning: '+str(semibin_folder_name)+'\n')
                 #             f.close()
-            else:
+            elif run_semibin2:
                 semibin_folder_name=str(group)+'_'+assembly+'_100_semibin_genomes'
                 if semibin_folder_name not in binning_ds.keys():
                     os.system('SemiBin2 single_easy_bin -i '+str(group)+'_'+assembly+' -b '+str(bam_sorted)+' -o '+str(group)+'_'+assembly+'_100_semibin_genomes --processes '+str(num_threads))
