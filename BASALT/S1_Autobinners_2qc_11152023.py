@@ -11,7 +11,7 @@ and PE-based contig connection files.
 
 from lib2to3.fixes import fix_buffer
 from Bio import SeqIO
-import sys, os, time, gc
+import sys, os, time, gc, subprocess
 from collections import Counter
 from multiprocessing import Pool
 import shutil
@@ -25,6 +25,13 @@ from Cleanup import (
 )
 
 _SEMIBIN_ENABLED_CACHE = None
+
+CHECKM2_QUALITY_REPORT_HEADER = (
+    'Name\tCompleteness\tContamination\tCompleteness_Model_Used\t'
+    'Translation_Table_Used\tCoding_Density\tContig_N50\tAverage_Gene_Length\t'
+    'Genome_Size\tGC_Content\tTotal_Coding_Sequences\tTotal_Contigs\t'
+    'Max_Contig_Length\tAdditional_Notes\n'
+)
 
 
 def semibin_enabled():
@@ -49,6 +56,77 @@ def semibin_enabled():
         return _SEMIBIN_ENABLED_CACHE
     _SEMIBIN_ENABLED_CACHE = True
     return _SEMIBIN_ENABLED_CACHE
+
+
+def run_checkm2_predict(binset, extension, output_folder, num_threads):
+    """
+    Run CheckM2 and fail fast if it does not create its quality report.
+    """
+    report = os.path.join(str(output_folder), 'quality_report.tsv')
+    if os.path.exists(report):
+        print('CheckM2 quality report already exists for '+str(binset)+': '+str(report))
+        return
+
+    bin_files = []
+    if os.path.isdir(str(binset)):
+        suffix = '.'+str(extension).lstrip('.')
+        bin_files = [
+            item for item in os.listdir(str(binset))
+            if item.endswith(suffix) and os.path.isfile(os.path.join(str(binset), item))
+        ]
+    if len(bin_files) == 0:
+        if os.path.isdir(str(output_folder)):
+            shutil.rmtree(str(output_folder), ignore_errors=True)
+        os.makedirs(str(output_folder), exist_ok=True)
+        with open(report, 'w') as handle:
+            handle.write(CHECKM2_QUALITY_REPORT_HEADER)
+        print('[WARN] No *.'+str(extension)+' bins found in '+str(binset)+'; wrote empty CheckM2 report.')
+        return
+
+    if os.path.isdir(str(output_folder)):
+        print('Removing stale CheckM2 output without quality_report.tsv: '+str(output_folder))
+        shutil.rmtree(str(output_folder), ignore_errors=True)
+
+    command = (
+        'checkm2 predict -t ' + str(num_threads)
+        + ' -i ' + str(binset)
+        + ' -x ' + str(extension)
+        + ' -o ' + str(output_folder)
+    )
+    status = os.system(command)
+    if status != 0 or not os.path.exists(report):
+        raise RuntimeError(
+            'CheckM2 failed for ' + str(binset)
+            + '; expected quality report was not created: ' + report
+        )
+
+
+def run_depth_summarizer(output_depth, bam_sorted, attempts=2):
+    """
+    Run jgi_summarize_bam_contig_depths and verify that a usable depth file exists.
+    """
+    command = 'jgi_summarize_bam_contig_depths --outputDepth '+str(output_depth)+' '+str(bam_sorted)
+    last_status = None
+    for attempt in range(1, int(attempts)+1):
+        if os.path.exists(str(output_depth)):
+            os.remove(str(output_depth))
+        print('CMD: '+str(command))
+        last_status = subprocess.call(command, shell=True)
+        if os.path.exists(str(output_depth)):
+            row_count = 0
+            for line in open(str(output_depth), 'r'):
+                row_count += 1
+                if row_count >= 2:
+                    return
+            print('[WARN] Depth file was created but has too few rows: '+str(output_depth))
+        else:
+            print('[WARN] Depth file was not created: '+str(output_depth))
+        if attempt < int(attempts):
+            print('[WARN] Retrying depth generation for '+str(output_depth))
+    raise RuntimeError(
+        'jgi_summarize_bam_contig_depths failed for '+str(output_depth)
+        + '; exit status='+str(last_status)
+    )
 
 
 def fq2fa_conversion(filename):
@@ -398,9 +476,19 @@ def mapping_lr_o(assembly, group, datasets, num_threads, pwd, data_type):
         f_coverage_matrix=open('Coverage_list_'+str(group)+'_'+assembly+'.txt', 'w')
 
     for i in range(1, len(datasets)+1):
-        if data_type == 'ont': 
+        sorted_bam = str(group)+'_lr'+str(i)+'_sorted.bam'
+        if os.path.exists(sorted_bam) and os.path.getsize(sorted_bam) > 0:
+            print('Reusing existing sorted BAM file: '+str(sorted_bam))
+            f_coverage_matrix.write('Coverage_list_lr'+str(i)+'.txt'+'\n')
+            if i == 1:
+                bam_sorted=sorted_bam
+            else:
+                bam_sorted+=' '+sorted_bam
+            continue
+
+        if data_type == 'ont':
             os.system('minimap2 -t '+str(num_threads)+' -ax map-ont '+str(group)+'_'+assembly+' '+str(datasets[i-1])+' > '+str(group)+'_lr'+str(i)+'.sam')
-        elif data_type == 'pb': 
+        elif data_type == 'pb':
             os.system('minimap2 -t '+str(num_threads)+' -ax map-pb '+str(group)+'_'+assembly+' '+str(datasets[i-1])+' > '+str(group)+'_lr'+str(i)+'.sam')
 
         ### Parsing connections
@@ -412,24 +500,24 @@ def mapping_lr_o(assembly, group, datasets, num_threads, pwd, data_type):
 
         print('Sorting bam file')
         ### py2
-        os.system('samtools sort -@ '+str(num_threads)+' -o '+str(group)+'_lr'+str(i)+'_sorted.bam '+str(group)+'_lr'+str(i)+'.bam') 
+        os.system('samtools sort -@ '+str(num_threads)+' -o '+sorted_bam+' '+str(group)+'_lr'+str(i)+'.bam')
 
         try:
-            with open(str(group)+'_lr'+str(i)+'_sorted.bam', 'r') as fh:
+            with open(sorted_bam, 'r') as fh:
                 pass
         except FileNotFoundError:
             print('samtools sorting '+str(group)+'_lr'+str(i)+'.bam failed. Redoing')
             ### py3
-            os.system('samtools sort -@ '+str(num_threads)+' -o '+str(group)+'_lr'+str(i)+'_sorted.bam '+str(group)+'_lr'+str(i)+'.bam' )
-        if os.path.exists(str(group)+'_lr'+str(i)+'_sorted.bam') and os.path.exists(str(group)+'_lr'+str(i)+'.bam'):
+            os.system('samtools sort -@ '+str(num_threads)+' -o '+sorted_bam+' '+str(group)+'_lr'+str(i)+'.bam' )
+        if os.path.exists(sorted_bam) and os.path.exists(str(group)+'_lr'+str(i)+'.bam'):
             os.remove(str(group)+'_lr'+str(i)+'.bam')
     
         f_coverage_matrix.write('Coverage_list_lr'+str(i)+'.txt'+'\n')
 
         if i == 1:
-            bam_sorted=str(group)+'_lr1_sorted.bam'
+            bam_sorted=sorted_bam
         else:
-            bam_sorted+=' '+str(group)+'_lr'+str(i)+'_sorted.bam'
+            bam_sorted+=' '+sorted_bam
     f_coverage_matrix.close()
     print('Mapping Done!')
     print('-------------')
@@ -1257,16 +1345,18 @@ def autobinners(softwares, assembly_file, depth_file, depth_file_list, Coverage_
                 #     fb=open('Basalt_log.txt','a')
                 #     fb.write(str(metabat_folder_name)+' already exist'+'\n') #EMA: end modification accomplished
                 #     fb.close()
-                if len(depth_file_list) == 3:
-                    for i in range(1,3):
-                        threshold=str(i)+str(item)
-                        metabat_folder_name2=str(assembly_file)+'_'+str(threshold)+'_metabat_genomes'
+            binset_checkm[metabat_folder_name]=str(assembly_file)+'_'+str(item)+'_metabat_checkm'
+            if len(depth_file_list) == 3:
+                for i in range(1,3):
+                    threshold=str(i)+str(item)
+                    metabat_folder_name2=str(assembly_file)+'_'+str(threshold)+'_metabat_genomes'
+                    if metabat_folder_name2 not in binning_ds.keys():
                         os.system('mkdir '+str(metabat_folder_name2))
                         genome_folders.append(metabat_folder_name2)
                         os.system('cp '+str(assembly_file)+' '+str(depth_file_list[i])+' '+pwd+'/'+str(metabat_folder_name2))
                         metabat(assembly_file, pwd, str(depth_file_list[i]), threshold, num_threads)
-                        binset_checkm[metabat_folder_name2]=str(assembly_file)+'_'+str(threshold)+'_metabat_checkm'
-                    
+                    binset_checkm[metabat_folder_name2]=str(assembly_file)+'_'+str(threshold)+'_metabat_checkm'
+
             p_bin_num=0
             os.chdir(pwd+'/'+str(metabat_folder_name))
             for root, dirs, files in os.walk(pwd+'/'+str(metabat_folder_name)):
@@ -1371,14 +1461,14 @@ def autobinners(softwares, assembly_file, depth_file, depth_file_list, Coverage_
             # database_path='--database_path ~/databases/CheckM2_database/uniref100.KO.1.dmnd'
             if 'concoct' in str(binset) or 'maxbin' in str(binset):
                 if QC == 'checkm2':
-                    os.system('checkm2 predict -t '+str(num_threads)+' -i '+str(binset)+' -x fasta -o '+str(binset_checkm[binset]))
+                    run_checkm2_predict(binset, 'fasta', binset_checkm[binset], num_threads)
                 elif QC == 'checkm':
                     os.system('checkm lineage_wf -t '+str(num_threads)+' -x fasta '+str(binset)+' '+str(binset_checkm[binset]))
 
                 # os.system('checkm lineage_wf -t '+str(num_threads)+' -x fa '+str(metabat_genome)+' '+str(metabat_checkm))
             elif 'metabat' in str(binset):                
                 if QC == 'checkm2':
-                    os.system('checkm2 predict -t '+str(num_threads)+' -i '+str(binset)+' -x fa -o '+str(binset_checkm[binset]))
+                    run_checkm2_predict(binset, 'fa', binset_checkm[binset], num_threads)
                 elif QC == 'checkm':
                     os.system('checkm lineage_wf -t '+str(num_threads)+' -x fa '+str(binset)+' '+str(binset_checkm[binset]))
 
@@ -1562,6 +1652,10 @@ def autobinner_main(assembly_list, datasets, lr, hifi_list, insert_size, num_thr
     fb.close()
     
     end_mo_acc, ab_acc_asb, mapping_ds, binning_ds, checkm_done_f, binned_proj = {}, {}, {}, {}, {}, {}
+    assembly_key_by_label = {
+        os.path.basename(str(assembly_path)): str(assembly_path)
+        for assembly_path in assembly_list
+    }
     for line in open('Autobinner_checkpoint.txt', 'r'):
         if 'EMA: ' in line: #EMA: end modification accomplished
             processed_dataset=line.strip().split('EMA: ')[1]
@@ -1578,10 +1672,12 @@ def autobinner_main(assembly_list, datasets, lr, hifi_list, insert_size, num_thr
             binned_proj[processed_dataset]=''
             assembly_name_list=str(processed_dataset).split('_')
             assembly_name='_'.join(assembly_name_list[1:-3])
+            assembly_key=assembly_key_by_label.get(assembly_name, assembly_name)
             try:
-                bins_folders[str(assembly_name)].append(processed_dataset)
+                if processed_dataset not in bins_folders[str(assembly_key)]:
+                    bins_folders[str(assembly_key)].append(processed_dataset)
             except:
-                bins_folders[str(assembly_name)]=[processed_dataset]
+                bins_folders[str(assembly_key)]=[processed_dataset]
         elif 'Checkm: ' in line: #ABA: auto-binning accomplished
             processed_dataset=line.strip().split('Checkm: ')[1]
             checkm_done_f[processed_dataset]=''
@@ -1727,32 +1823,14 @@ def autobinner_main(assembly_list, datasets, lr, hifi_list, insert_size, num_thr
                 if len(sort_bam) != 2: ### Generate total depth; len(sort_bam) == 0: there is only HTS data; len(sort_bam) == 1: there is only bw2 mapping result; 
                     # logfile=open('Mapping_log_'+str(group)+'_'+assembly+'.txt', 'a')
                     print('Scorting SAM file(s)')
-                    print('CMD: jgi_summarize_bam_contig_depths --outputDepth '+str(group)+'_assembly.depth.txt '+ str(bam_sorted))
                     # logfile.write(str('Command: jgi_summarize_bam_contig_depths --outputDepth '+str(group)+'_assembly.depth.txt '+str(bam_sorted))+'\n')
-                    try:
-                        os.system('jgi_summarize_bam_contig_depths --outputDepth '+str(group)+'_assembly.depth.txt '+str(bam_sorted))
-                        nxxyy=0
-                        for line in open(str(group)+'_assembly.depth.txt','r'):
-                            nxxyy+=1
-                            if nxxyy == 2:
-                                break
-                    except:
-                        os.system('jgi_summarize_bam_contig_depths --outputDepth '+str(group)+'_assembly.depth.txt '+str(bam_sorted))
+                    run_depth_summarizer(str(group)+'_assembly.depth.txt', bam_sorted)
                     ###os.system('/home/emma/software/metabat/jgi_summarize_bam_contig_depths --outputDepth '+str(group)+'_assembly.depth.txt '+str(bam_sorted))    
                     # logfile.close()
                     depth_file_list.append(str(group)+'_assembly.depth.txt')
                 else:
                     print('Scorting SAM file(s)')
-                    print('CMD: jgi_summarize_bam_contig_depths --outputDepth '+str(group)+'_assembly.depth.txt '+ str(bam_sorted))
-                    try:
-                        os.system('jgi_summarize_bam_contig_depths --outputDepth '+str(group)+'_assembly.depth.txt '+str(bam_sorted))
-                        nxxyy=0
-                        for line in open(str(group)+'_assembly.depth.txt','r'):
-                            nxxyy+=1
-                            if nxxyy == 2:
-                                break
-                    except:
-                        os.system('jgi_summarize_bam_contig_depths --outputDepth '+str(group)+'_assembly.depth.txt '+str(bam_sorted))
+                    run_depth_summarizer(str(group)+'_assembly.depth.txt', bam_sorted)
                     
                     depth_file_list.append(str(group)+'_assembly.depth.txt')
                     depth_file_list.append(str(group)+'_assembly.depth_1.txt')
@@ -1904,7 +1982,7 @@ def autobinner_main(assembly_list, datasets, lr, hifi_list, insert_size, num_thr
 
                 os.chdir(pwd)
                 if QC == 'checkm2':
-                    os.system('checkm2 predict -t '+str(num_threads)+' -i '+str(group)+'_'+assembly+'_'+str(xyz)+'_semibin_genomes -x fa -o '+str(group)+'_'+assembly+'_'+str(xyz)+'_semibin_checkm')
+                    run_checkm2_predict(str(group)+'_'+assembly+'_'+str(xyz)+'_semibin_genomes', 'fa', str(group)+'_'+assembly+'_'+str(xyz)+'_semibin_checkm', num_threads)
                 elif QC == 'checkm':
                     os.system('checkm lineage_wf -t '+str(num_threads)+' -x fa '+str(group)+'_'+assembly+'_'+str(xyz)+'_semibin_genomes '+str(group)+'_'+assembly+'_'+str(xyz)+'_semibin_checkm')
 
@@ -1935,10 +2013,10 @@ def autobinner_main(assembly_list, datasets, lr, hifi_list, insert_size, num_thr
                 for itemx in p_b.keys():
                     os.system('mv '+str(itemx)+' '+pwd+'/'+str(group)+'_'+assembly+'_1_SingleContig_genomes')
                 
-                if QC == 'checkm2':
-                    os.system('checkm2 predict -t '+str(num_threads)+' -i '+str(group)+'_'+assembly+'_1_SingleContig_genomes -x fa -o '+str(group)+'_'+assembly+'_1_SingleContig_checkm')
-                elif QC == 'checkm':
-                    os.system('checkm lineage_wf -t '+str(num_threads)+' -x fa '+str(group)+'_'+assembly+'_1_SingleContig_genomes '+str(group)+'_'+assembly+'_1_SingleContig_checkm')
+            if QC == 'checkm2':
+                run_checkm2_predict(str(group)+'_'+assembly+'_1_SingleContig_genomes', 'fa', str(group)+'_'+assembly+'_1_SingleContig_checkm', num_threads)
+            elif QC == 'checkm':
+                os.system('checkm lineage_wf -t '+str(num_threads)+' -x fa '+str(group)+'_'+assembly+'_1_SingleContig_genomes '+str(group)+'_'+assembly+'_1_SingleContig_checkm')
 
                 try:
                     bins_folders[str(assembly_list[item])].append(str(group)+'_'+assembly+'_1_SingleContig_genomes')

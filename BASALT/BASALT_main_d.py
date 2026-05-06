@@ -391,17 +391,27 @@ def BASALT_main_d(assembly_list, datasets, num_threads, lr_list, hifi_list,
                 assembly_MoDict[str(n)]=str(line).strip().split('\t')[1].strip()
                 # assembly_MoDict[str(line).strip().split('\t')[1].strip().split('_')[0]]=str(line).strip().split('\t')[1].strip()
 
-            n=0
             for line in open('Bins_folder.txt','r'):
-                n+=1
-                # assembly_name=str(line).strip().split('[')[1].replace('\'','').split('_')[0]
-                bins_folders[str(n)]=[]
-                genomes_list=str(line).strip().split('\t')[1].strip().replace('[','').replace(']','').replace('\'','').replace(' ','').split(',')
+                if '\t' not in line:
+                    continue
+                genomes_list=str(line).strip().split('\t', 1)[1].strip().replace('[','').replace(']','').replace('\'','').replace(' ','').split(',')
                 for genomes_folder in genomes_list:
+                    if str(genomes_folder).strip() == '':
+                        continue
                     genomes_folder_name_list=genomes_folder.split('_')
+                    if len(genomes_folder_name_list) < 2:
+                        continue
+                    group_id=genomes_folder_name_list[0]
+                    if group_id not in depth_total.keys():
+                        print('[WARN] Skipping bin folder with no matching depth file: '+str(genomes_folder))
+                        fx.write('[WARN] Skipping bin folder with no matching depth file: '+str(genomes_folder)+'\n')
+                        continue
                     genomes_folder_name_list.remove(genomes_folder_name_list[-1])
                     genomes_folder_name='_'.join(genomes_folder_name_list)
-                    bins_folders[str(n)].append(genomes_folder_name)
+                    if group_id not in bins_folders.keys():
+                        bins_folders[group_id]=[]
+                    if genomes_folder_name not in bins_folders[group_id]:
+                        bins_folders[group_id].append(genomes_folder_name)
                     
             Ax=binsabundance_pe_connections(bins_folders, depth_total, connections_total_dict, assembly_MoDict, num_threads)
 
