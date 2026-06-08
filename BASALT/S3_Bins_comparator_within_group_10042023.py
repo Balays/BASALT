@@ -16,6 +16,7 @@ import copy
 import os
 import re
 import shutil
+import tarfile
 
 FASTA_SUFFIXES = ('.fa', '.fasta', '.fna', '.fas', '.fsa')
 
@@ -181,6 +182,81 @@ def _resolve_bin_path(folder, bin_id):
     return None
 
 
+def _resolve_bin_archive_member(folder, bin_id):
+    """
+    Resolve a bin FASTA from BASALT's Remove_bins.tar.gz archive.
+
+    S3 filters each source binner folder before the final BestBinsSet copy. In
+    recovered/rerun workspaces this can move every candidate FASTA into
+    Remove_bins.tar.gz, leaving quality reports that still reference valid bins
+    but no live FASTA files for the later copy step. Treat the archive as a
+    fallback source so selected bins can still be materialized.
+    """
+    archive_path = os.path.join(folder, 'Remove_bins.tar.gz')
+    if not os.path.isfile(archive_path):
+        return None, None
+
+    target_base = _strip_fasta_suffix(bin_id)
+    target_suffix = None
+    if '_genomes.' in target_base:
+        target_suffix = target_base.split('_genomes.')[-1]
+    target_suffix_unpadded = None
+    if target_suffix is not None and target_suffix.isdigit():
+        target_suffix_unpadded = str(int(target_suffix))
+    target_prefix, target_token = _split_qualified_bin_id(target_base)
+
+    try:
+        with tarfile.open(archive_path, 'r:gz') as archive:
+            for member in archive.getmembers():
+                if not member.isfile():
+                    continue
+                file = os.path.basename(member.name)
+                if not _is_fasta_file(file):
+                    continue
+
+                file_base = _strip_fasta_suffix(file)
+                if file_base == target_base:
+                    return archive_path, member.name
+
+                file_prefix, file_token = _split_qualified_bin_id(file_base)
+                if (
+                    target_prefix is not None
+                    and file_prefix is not None
+                    and target_prefix == file_prefix
+                    and _numeric_tokens_equivalent(target_token, file_token)
+                ):
+                    return archive_path, member.name
+
+                if target_suffix is not None:
+                    if file_base == target_suffix:
+                        return archive_path, member.name
+                    if target_suffix_unpadded is not None and file_base == target_suffix_unpadded:
+                        return archive_path, member.name
+                    if _numeric_tokens_equivalent(file_base, target_suffix):
+                        return archive_path, member.name
+                    if file_base.endswith('.' + target_suffix) or file_base.endswith('_' + target_suffix):
+                        return archive_path, member.name
+                    if target_suffix_unpadded is not None and (
+                        file_base.endswith('.' + target_suffix_unpadded)
+                        or file_base.endswith('_' + target_suffix_unpadded)
+                    ):
+                        return archive_path, member.name
+    except (tarfile.TarError, OSError):
+        return None, None
+
+    return None, None
+
+
+def _copy_archive_member(archive_path, member_name, destination_path):
+    with tarfile.open(archive_path, 'r:gz') as archive:
+        source = archive.extractfile(member_name)
+        if source is None:
+            return False
+        with open(destination_path, 'wb') as destination:
+            shutil.copyfileobj(source, destination)
+    return True
+
+
 def _resolve_checkm_key(checkm_table, bin_id):
     """
     Resolve relation keys back to the CheckM table key for the same bin.
@@ -268,15 +344,26 @@ def _copy_selected_bins_from_source(selected_items, pwd, destination_folder):
         bin_path = _resolve_bin_path(source_folder, source_id)
         if bin_path is None:
             bin_path = _resolve_bin_path(source_folder, item)
+        archive_path, archive_member = (None, None)
         if bin_path is None:
+            archive_path, archive_member = _resolve_bin_archive_member(source_folder, source_id)
+        if bin_path is None and archive_member is None:
             print('BestBinsSet copy error! Missing FASTA for '+str(source_id)+' in '+str(source_folder))
             continue
 
-        suffix = os.path.splitext(bin_path)[1]
+        if bin_path is not None:
+            suffix = os.path.splitext(bin_path)[1]
+        else:
+            suffix = os.path.splitext(os.path.basename(archive_member))[1]
         if suffix.lower() not in FASTA_SUFFIXES:
             suffix = '.fa'
         destination_name = source_id + suffix
-        shutil.copy2(bin_path, os.path.join(destination_folder, destination_name))
+        destination_path = os.path.join(destination_folder, destination_name)
+        if bin_path is not None:
+            shutil.copy2(bin_path, destination_path)
+        elif not _copy_archive_member(archive_path, archive_member, destination_path):
+            print('BestBinsSet copy error! Could not extract FASTA for '+str(source_id)+' from '+str(archive_path))
+            continue
         copied[destination_name] = source_id
 
     return copied

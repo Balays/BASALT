@@ -386,7 +386,17 @@ def outlier_predictor(depth_TNF_matrix, contigs_depth, bin_contigs,
         os.system('bowtie2-build '+str(total_fa)+' '+str(total_fa))
 
     ###
+    def sort_bam_or_fail(bam_path, sorted_bam_path):
+        """
+        Sort a BAM using the modern samtools CLI and fail clearly if it
+        does not produce the expected output file.
+        """
+        os.system('samtools sort -@ '+str(num_threads)+' -o '+str(sorted_bam_path)+' '+str(bam_path))
+        if not os.path.exists(sorted_bam_path):
+            raise RuntimeError('samtools sort failed to create '+str(sorted_bam_path)+' from '+str(bam_path))
+
     bam_sorted1=''
+    bam_sorted1_list=[]
     if len(datasets) != 0:        
         n = 0
         for item in datasets.keys():
@@ -394,24 +404,14 @@ def outlier_predictor(depth_TNF_matrix, contigs_depth, bin_contigs,
             n+=1
             os.system('bowtie2 -p '+str(num_threads)+' -x '+str(total_fa)+' -1 '+str(datasets[item][0])+' -2 '+str(datasets[item][1])+' -S '+str(item)+'.sam -q --no-unal')
             os.system('samtools view -@ '+str(num_threads)+' -b -S '+str(item)+'.sam -o '+str(item)+'.bam')
-            # py2
-            os.system('samtools sort -@ '+str(num_threads)+' '+str(item)+'.bam '+str(item)+'_sorted') 
-
-            try:
-                with open(str(item)+'_sorted.bam', 'r') as fh:
-                    pass
-            except FileNotFoundError:
-                print('samtools sorting '+str(item)+'.bam failed. Redoing')
-                # py3
-                os.system('samtools sort -@ '+str(num_threads)+' -o '+str(item)+'_sorted.bam '+str(item)+'.bam')
+            sort_bam_or_fail(str(item)+'.bam', str(item)+'_sorted.bam')
             os.system('rm '+str(item)+'.sam')
 
-            if item == '1':
-                bam_sorted1='1_sorted.bam'
-            else:
-                bam_sorted1+=' '+str(item)+'_sorted.bam'
+            bam_sorted1_list.append(str(item)+'_sorted.bam')
+        bam_sorted1=' '.join(bam_sorted1_list)
     
     bam_sorted2=''
+    bam_sorted2_list=[]
     if len(lr) != 0 or len(hifi_list) != 0:
         print('Mapping '+str(lr)+' to contigs/scaffolds')
         if len(hifi_list) != 0:
@@ -430,21 +430,8 @@ def outlier_predictor(depth_TNF_matrix, contigs_depth, bin_contigs,
                 os.system('rm hifi'+str(i)+'.sam')
 
                 print('Sorting bam file')
-                ### py2
-                os.system('samtools sort -@ '+str(num_threads)+' hifi'+str(i)+'.bam hifi'+str(i)+'_sorted') 
-
-                try:
-                    with open('hifi'+str(i)+'_sorted.bam', 'r') as fh:
-                        pass
-                except FileNotFoundError:
-                    print('samtools sorting hifi'+str(i)+'.bam failed. Redoing')
-                    ### py3
-                    os.system('samtools sort -@ '+str(num_threads)+' -o hifi'+str(i)+'_sorted.bam hifi'+str(i)+'.bam' )
-            
-                if i == 1:
-                    bam_sorted2='hifi1_sorted.bam'
-                else:
-                    bam_sorted2+=' hifi'+str(i)+'_sorted.bam'
+                sort_bam_or_fail('hifi'+str(i)+'.bam', 'hifi'+str(i)+'_sorted.bam')
+                bam_sorted2_list.append('hifi'+str(i)+'_sorted.bam')
 
 
         if len(lr) != 0:
@@ -460,21 +447,10 @@ def outlier_predictor(depth_TNF_matrix, contigs_depth, bin_contigs,
                 os.system('rm lr'+str(i)+'.sam')
 
                 print('Sorting bam file')
-                ### py2
-                os.system('samtools sort -@ '+str(num_threads)+' lr'+str(i)+'.bam lr'+str(i)+'_sorted') 
+                sort_bam_or_fail('lr'+str(i)+'.bam', 'lr'+str(i)+'_sorted.bam')
+                bam_sorted2_list.append('lr'+str(i)+'_sorted.bam')
 
-                try:
-                    with open('lr'+str(i)+'_sorted.bam', 'r') as fh:
-                        pass
-                except FileNotFoundError:
-                    print('samtools sorting lr'+str(i)+'.bam failed. Redoing')
-                    ### py3
-                    os.system('samtools sort -@ '+str(num_threads)+' -o lr'+str(i)+'_sorted.bam lr'+str(i)+'.bam' )
-            
-                if i == 1:
-                    bam_sorted2='lr1_sorted.bam'
-                else:
-                    bam_sorted2+=' lr'+str(i)+'_sorted.bam'
+        bam_sorted2=' '.join(bam_sorted2_list)
 
     if len(bam_sorted1) !=0 and len(bam_sorted2) !=0:
         bam_sorted=bam_sorted1+' '+bam_sorted2
@@ -482,16 +458,21 @@ def outlier_predictor(depth_TNF_matrix, contigs_depth, bin_contigs,
         bam_sorted=bam_sorted1
     elif len(bam_sorted1) ==0 and len(bam_sorted2) !=0:
         bam_sorted=bam_sorted2
+    else:
+        raise RuntimeError('No sorted BAM files were produced during BASALT refinement remapping.')
 
-    try:
-        os.system('jgi_summarize_bam_contig_depths --outputDepth Re-mapped_depth.txt '+str(bam_sorted))
-        nxxyy=0
-        for line in open('Re-mapped_depth.txt','r'):
-            nxxyy+=1
-            if nxxyy == 2:
-                break
-    except:
-        os.system('jgi_summarize_bam_contig_depths --outputDepth Re-mapped_depth.txt '+str(bam_sorted))
+    if os.path.exists('Re-mapped_depth.txt'):
+        os.remove('Re-mapped_depth.txt')
+    os.system('jgi_summarize_bam_contig_depths --outputDepth Re-mapped_depth.txt '+str(bam_sorted))
+    if not os.path.exists('Re-mapped_depth.txt'):
+        raise RuntimeError('jgi_summarize_bam_contig_depths did not create Re-mapped_depth.txt from: '+str(bam_sorted))
+    nxxyy=0
+    for line in open('Re-mapped_depth.txt','r'):
+        nxxyy+=1
+        if nxxyy == 2:
+            break
+    if nxxyy < 2:
+        raise RuntimeError('Re-mapped_depth.txt was created but appears empty or truncated.')
 
     os.system('rm '+str(bam_sorted)+' *.bt2')
     
