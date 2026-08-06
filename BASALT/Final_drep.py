@@ -13,6 +13,7 @@ from multiprocessing import Pool
 import pandas as pd
 import numpy as np
 from sklearn.decomposition import PCA
+from runtime_utils import build_bowtie2_index
 
 def Contigs_aligner(Contigs_assembly1, num_threads):
     print('Using BLAST to align '+Contigs_assembly1+' to '+Contigs_assembly1)
@@ -1123,7 +1124,7 @@ def new_selected_bins_generator(selected_bins, eliminated_bins, all_bins_1, all_
 
 def final_iteration_mapping(contigs, datasets, num_threads, pwd):
     print('Building '+str(contigs)+' Bowtie2 index')
-    os.system('bowtie2-build '+str(contigs)+' '+str(contigs))
+    build_bowtie2_index(contigs, num_threads)
     for i in range(1, len(datasets)+1):
         os.system('bowtie2 -p '+str(num_threads)+' -x '+str(contigs)+' -1 '+str(datasets[str(i)][0])+' -2 '+str(datasets[str(i)][1])+' -S '+str(contigs)+'-'+str(i)+'.sam -q --no-unal')
         os.system('samtools view -@ '+str(num_threads)+' -b -S '+str(contigs)+'-'+str(i)+'.sam -o '+str(contigs)+'-'+str(i)+'.bam')
@@ -1217,7 +1218,7 @@ def final_iteration_mapping(contigs, datasets, num_threads, pwd):
 
 def mapping(bin, datasets, num_threads, pwd):
     print('Building '+str(bin)+' Bowtie2 index')
-    os.system('bowtie2-build '+str(bin)+' '+str(bin))
+    build_bowtie2_index(bin, num_threads)
     for i in range(1, len(datasets)+1):
         os.system('bowtie2 -p '+str(num_threads)+' -x '+str(bin)+' -1 '+str(datasets[str(i)][0])+' -2 '+str(datasets[str(i)][1])+' -S '+str(bin)+'-'+str(i)+'.sam -q --no-unal')
         os.system('samtools view -@ '+str(num_threads)+' -b -S '+str(bin)+'-'+str(i)+'.sam -o '+str(bin)+'-'+str(i)+'.bam')

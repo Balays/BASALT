@@ -11,6 +11,7 @@ internal binset representation.
 
 from lib2to3.fixes import fix_buffer
 from Bio import SeqIO
+from qc_utils import run_checkm2_predict
 import sys, os, time
 from collections import Counter
 from multiprocessing import Pool
@@ -97,7 +98,10 @@ def metabinner(assembly_file, depth_file, num_threads, ram, pwd, QC_software):
     if QC_software == 'checkm':
         os.system('checkm lineage_wf -t '+str(num_threads)+' -x fa '+str(assembly_file)+'_100_metabinner_genomes '+str(assembly_file)+'_100_metabinner_checkm')
     elif QC_software == 'checkm2':
-        os.system('checkm2 predict -t '+str(num_threads)+' -i '+str(assembly_file)+'_100_metabinner_genomes  -x fa -o '+str(assembly_file)+'_100_metabinner_checkm')
+        run_checkm2_predict(
+            str(assembly_file)+'_100_metabinner_genomes', 'fa',
+            str(assembly_file)+'_100_metabinner_checkm', num_threads,
+        )
     os.system('rm -rf '+str(assembly_file)+'_metabinner '+str(assembly_file)+'_coverage_profile.tsv '+str(assembly_name)+'_kmer_4_f1000.csv')
 
 def vamb(assembly_file, datasets, num_threads, pwd, QC_software):
@@ -162,7 +166,10 @@ def vamb(assembly_file, datasets, num_threads, pwd, QC_software):
     if QC_software == 'checkm':
         os.system('checkm lineage_wf -t '+str(num_threads)+' -x fa '+str(assembly_file)+'_100_vamb_genomes '+str(assembly_file)+'_100_vamb_checkm')
     elif QC_software == 'checkm2':
-        os.system('checkm2 predict -t '+str(num_threads)+' -i '+str(assembly_file)+'_100_vamb_genomes  -x fa -o '+str(assembly_file)+'_100_vamb_checkm')
+        run_checkm2_predict(
+            str(assembly_file)+'_100_vamb_genomes', 'fa',
+            str(assembly_file)+'_100_vamb_checkm', num_threads,
+        )
     # os.system('rm *.seed *.out *.err *.nto *.gff *.ffn *.faa *.ndb *.njs *.not *.ntf')
     os.system('rm -rf '+str(assembly_file)+'_vamb')
 
@@ -233,7 +240,10 @@ def lorbin(assembly_file, datasets, num_threads, pwd, QC_software):
     if QC_software == 'checkm':
         os.system('checkm lineage_wf -t '+str(num_threads)+' -x fa '+str(assembly_file)+'_100_lorbin_genomes '+str(assembly_file)+'_100_lorbin_checkm')
     elif QC_software == 'checkm2':
-        os.system('checkm2 predict -t '+str(num_threads)+' -i '+str(assembly_file)+'_100_lorbin_genomes  -x fa -o '+str(assembly_file)+'_100_lorbin_checkm')
+        run_checkm2_predict(
+            str(assembly_file)+'_100_lorbin_genomes', 'fa',
+            str(assembly_file)+'_100_lorbin_checkm', num_threads,
+        )
 
 
 

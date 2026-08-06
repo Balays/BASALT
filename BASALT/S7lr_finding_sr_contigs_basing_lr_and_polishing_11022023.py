@@ -17,6 +17,14 @@ from xmlrpc.server import SimpleXMLRPCRequestHandler
 from Bio import SeqIO
 import sys, os, threading, copy, math
 from multiprocessing import Pool
+from runtime_utils import (
+    atomic_gzip,
+    build_bowtie2_index,
+    env_flag,
+    open_text_auto,
+    resolve_text_path,
+)
+from qc_utils import run_checkm2_predict
 
 
 def parse_sam_bwa(sam_file, fq, pair, n, batch, mp_run):
@@ -436,20 +444,28 @@ def parse_lr_sam(sam_file, long_read, sn):
             f1=open(str(bin_id)+'_lr.fq','w')
         f1.close()
     f.close()
+    atomic_gzip(
+        'Bin_long_read'+str(sn)+'.txt',
+        enabled=env_flag('BASALT_GZIP_LONG_READ_REPORTS'),
+    )
 
     f=open('Long_read_bin'+str(sn)+'.txt','w')
     for lr in lr_bin.keys():
         f.write(str(lr)+'\t'+str(lr_bin[lr])+'\n')
     f.close()
+    atomic_gzip(
+        'Long_read_bin'+str(sn)+'.txt',
+        enabled=env_flag('BASALT_GZIP_LONG_READ_REPORTS'),
+    )
 
     n, record_bin_line, record_bin_line2 = 0, {}, {}
-    for line in open(long_read,'r'):
+    for line in open_text_auto(long_read, 'rt', errors='replace'):
         n+=1
         record_bin_line[n]=[]
 
     print('Splitting long reads to different bins '+str(long_read))
     n = 0
-    for line in open(long_read,'r'):
+    for line in open_text_auto(long_read, 'rt', errors='replace'):
         n+=1
         m=n-1
         if m % 4 == 0:
@@ -469,7 +485,7 @@ def parse_lr_sam(sam_file, long_read, sn):
     print(str(seq_num)+' reads from '+str(long_read)+' will be splitted into different bins')
 
     n1=0
-    for line in open(long_read,'r'):
+    for line in open_text_auto(long_read, 'rt', errors='replace'):
         n1+=1
         if n1 in record_bin_line.keys():
             for bin_id in record_bin_line[n1]:
@@ -515,7 +531,7 @@ def mapping_sr(total_fa, datasets_list, fq, pair, mapping_tool,
 
     ### bowtie2
     if mapping_tool == 'bw2':
-        os.system('bowtie2-build '+str(total_fa)+' '+str(total_fa))
+        build_bowtie2_index(total_fa, num_threads)
         n = 0
         for item in datasets_list.keys():
             print('Mapping '+str(datasets_list[item]))
@@ -915,10 +931,11 @@ def gf_lr_direct_polishing(gf_lr_fa, datasets_list, num_threads, pwd):
     f.close()  
             
 def fq_2_fa(bin_fq):
+    source_fq=resolve_text_path(bin_fq)
     fa=bin_fq.split('_lr.fq')[0]+'_lr.fa'
     f_name=open(fa,'w')
     n=0
-    for line in open(bin_fq,'r'):
+    for line in open_text_auto(source_fq, 'rt', errors='replace'):
         n+=1
         m=n%4
         if m == 1:
@@ -926,6 +943,10 @@ def fq_2_fa(bin_fq):
         elif m == 2:
             f_name.write(line)
     f_name.close()
+    atomic_gzip(
+        bin_fq,
+        enabled=env_flag('BASALT_GZIP_LONG_READ_FASTQ'),
+    )
     return fa
 
 def filtration(binset_folder, bin_name, lr_fa, num_threads, pwd):
@@ -1515,7 +1536,10 @@ def polishing_main(binset_folder, datasets_list, assembly_list, long_read, batch
                             os.chdir(pwd)
                         
                         # os.system('checkm lineage_wf -t '+str(num_threads)+' -x fa '+str(binset_folder)+'_gf_lr '+str(binset_folder)+'_gf_lr_checkm')
-                        os.system('checkm2 predict -t '+str(num_threads)+' -i '+str(binset_folder)+'_gf_lr -x fa -o '+str(binset_folder)+'_gf_lr_checkm')
+                        run_checkm2_predict(
+                            str(binset_folder)+'_gf_lr', 'fa',
+                            str(binset_folder)+'_gf_lr_checkm', num_threads,
+                        )
                         refined_checkm=checkm(str(binset_folder)+'_gf_lr_checkm', pwd)
                         # origin_checkm=checkm(str(binset_folder), pwd)
                         
@@ -1555,7 +1579,7 @@ def polishing_main(binset_folder, datasets_list, assembly_list, long_read, batch
                     os.system('mkdir Gap_filling_long_read')
                     os.system('mv *_gf_lr.fa *_gap_filling_lr.txt Gap_filling_long_read')
                     os.system('mkdir BestBinset_long_read')
-                    os.system('mv *_lr.fq BestBinset_long_read')
+                    os.system('mv *_lr.fq *_lr.fq.gz BestBinset_long_read 2>/dev/null || true')
                     f=open(polish_status_file,'a')
                     f.write('Evaluation gap filling extract contigs done!'+'\n')
                     f.close()

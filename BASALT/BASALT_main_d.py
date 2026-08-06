@@ -12,6 +12,7 @@ the core steps and is the default path when quality_check is 'checkm2'.
 import time
 import sys
 import os
+import shutil
 from Bio import SeqIO
 from S1_Autobinners_2qc_11152023 import *
 from S1e_extra_binners import *
@@ -28,7 +29,41 @@ from S9_Reassembly_10262023 import *
 from S9p_Hybrid_Reassembly_10262023 import *
 from S10_OLC_new_10262023 import *
 from glob import glob
-from Cleanup import *
+from Cleanup import cleanup, cleanup_enabled
+from qc_utils import run_checkm2_predict
+
+
+def _resolve_basalt_weight_dir():
+    """Resolve model weights from the environment, package, or user cache."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    configured = os.environ.get('BASALT_WEIGHT')
+    cache_dir = os.path.join(os.path.expanduser('~'), '.cache', 'BASALT')
+
+    def has_models(path):
+        return path and len(glob(os.path.join(path, '*_ensemble.csv'))) == 5
+
+    if configured:
+        if has_models(configured):
+            return configured
+        nested = os.path.join(configured, 'BASALT')
+        if has_models(nested):
+            return nested
+        return configured
+    if has_models(script_dir):
+        return script_dir
+    return cache_dir
+
+
+def _resolve_connections_file(assembly_name):
+    """Find a connection table using the modified assembly basename."""
+    normalized = os.path.basename(str(assembly_name).strip())
+    candidates = ['condense_connections_'+normalized+'.txt']
+    if '_' in normalized:
+        candidates.append('condense_connections_'+normalized.split('_', 1)[1]+'.txt')
+    for candidate in candidates:
+        if os.path.isfile(candidate):
+            return candidate
+    return candidates[0]
 
 
 def BASALT_main_d(assembly_list, datasets, num_threads, lr_list, hifi_list,
@@ -45,10 +80,9 @@ def BASALT_main_d(assembly_list, datasets, num_threads, lr_list, hifi_list,
     pwd=os.getcwd()
 
     #### Check existence of models
-    user_dir = os.path.expanduser('~')
-    # local_dir = f"{user_dir}/.cache/BASALT"
-    BASALT_WEIGHT = os.environ.get("BASALT_WEIGHT")
-    local_dir = BASALT_WEIGHT
+    local_dir = _resolve_basalt_weight_dir()
+    os.makedirs(local_dir, exist_ok=True)
+    os.environ['BASALT_WEIGHT'] = local_dir
     os.chdir(local_dir)
     model_list=glob(r'*_ensemble.csv')
     os.chdir(pwd)
@@ -57,8 +91,10 @@ def BASALT_main_d(assembly_list, datasets, num_threads, lr_list, hifi_list,
         x=0
     else:
         print('BASALT models lacking. Start download the model')
-        # os.system('python BASALT_models_download.py')
-        os.system('BASALT_models_download.py')
+        download_script = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), 'BASALT_models_download.py'
+        )
+        os.system('"'+sys.executable+'" "'+download_script+'"')
 
     #### Program start
     last_step=0
@@ -328,7 +364,8 @@ def BASALT_main_d(assembly_list, datasets, num_threads, lr_list, hifi_list,
                 #     genomes_folder_name='_'.join(genomes_folder_name_list)
                 #     bins_folders[str(n)].append(genomes_folder_name)
             f1.close()    
-            os.system('rm *.bam')
+            if cleanup_enabled():
+                os.system('rm *.bam')
             
             f_cp_m=open('Basalt_checkpoint.txt', 'a')
             f_cp_m.write('1st autobinner done!')
@@ -360,17 +397,25 @@ def BASALT_main_d(assembly_list, datasets, num_threads, lr_list, hifi_list,
                 assembly_MoDict[str(n)]=str(line).strip().split('\t')[1].strip()
                 # assembly_MoDict[str(line).strip().split('\t')[1].strip().split('_')[0]]=str(line).strip().split('\t')[1].strip()
 
-            n=0
             for line in open('Bins_folder.txt','r'):
-                n+=1
-                # assembly_name=str(line).strip().split('[')[1].replace('\'','').split('_')[0]
-                bins_folders[str(n)]=[]
-                genomes_list=str(line).strip().split('\t')[1].strip().replace('[','').replace(']','').replace('\'','').replace(' ','').split(',')
+                if '\t' not in line:
+                    continue
+                genomes_list=str(line).strip().split('\t', 1)[1].strip().replace('[','').replace(']','').replace('\'','').replace(' ','').split(',')
                 for genomes_folder in genomes_list:
+                    if str(genomes_folder).strip() == '':
+                        continue
                     genomes_folder_name_list=genomes_folder.split('_')
+                    if len(genomes_folder_name_list) < 2:
+                        continue
+                    group_id=genomes_folder_name_list[0]
+                    if group_id not in depth_total.keys():
+                        print('[WARN] Skipping bin folder with no matching depth file: '+str(genomes_folder))
+                        continue
                     genomes_folder_name_list.remove(genomes_folder_name_list[-1])
                     genomes_folder_name='_'.join(genomes_folder_name_list)
-                    bins_folders[str(n)].append(genomes_folder_name)
+                    bins_folders.setdefault(group_id, [])
+                    if genomes_folder_name not in bins_folders[group_id]:
+                        bins_folders[group_id].append(genomes_folder_name)
                     
             Ax=binsabundance_pe_connections(bins_folders, depth_total, connections_total_dict, assembly_MoDict, num_threads)
 
@@ -446,7 +491,8 @@ def BASALT_main_d(assembly_list, datasets, num_threads, lr_list, hifi_list,
                 f_cp_m.write('\n'+'3rd bin selection within multiple groups done!')
                 f_cp_m.close()
             else:
-                os.system('cp -r '+str(assembly_list[0])+'_comparison_files BestBinset_comparison_files')
+                comparison_folder = str(assembly_mo_list[0])+'_comparison_files'
+                os.system('cp -r '+comparison_folder+' BestBinset_comparison_files')
                 f_cp_m=open('Basalt_checkpoint.txt', 'a')
                 f_cp_m.write('\n'+'3rd bin selection did not perform, because there is only one assembly!')
                 f_cp_m.close()
@@ -462,8 +508,8 @@ def BASALT_main_d(assembly_list, datasets, num_threads, lr_list, hifi_list,
             for line in open('Bestbinset_list.txt','r'):
                 bestbinset_list.append(str(line).strip())
             
-            for item in assembly_list:
-                connections_list.append('condense_connections_'+item+'.txt')
+            for item in assembly_mo_list:
+                connections_list.append(_resolve_connections_file(item))
             if len(bestbinset_list) == 1:
                 print('Copying '+str(bestbinset_list[0])+' to BestBinset')
                 os.system('cp -r '+str(bestbinset_list[0])+' BestBinset')
@@ -489,8 +535,8 @@ def BASALT_main_d(assembly_list, datasets, num_threads, lr_list, hifi_list,
             for line in open('Assembly_mo_list.txt','r'):
                 assembly_mo_list.append(str(line).strip())
             for line in open('Assembly_MoDict.txt','r'):
-                item=str(line).strip().split('\t')[0].strip()
-                connections_list.append('condense_connections_'+item+'.txt')
+                item=str(line).strip().split('\t')[-1].strip()
+                connections_list.append(_resolve_connections_file(item))
 
             xxx=0
             try:
@@ -592,8 +638,8 @@ def BASALT_main_d(assembly_list, datasets, num_threads, lr_list, hifi_list,
                 for line in open('Assembly_mo_list.txt','r'):
                     assembly_mo_list.append(str(line).strip())
                 for line in open('Assembly_MoDict.txt','r'):
-                    item=str(line).strip().split('\t')[0].strip()
-                    connections_list.append('condense_connections_'+item+'.txt')
+                    item=str(line).strip().split('\t')[-1].strip()
+                    connections_list.append(_resolve_connections_file(item))
 
                 # Contig_retrieve_within_group_main(best_binset_after_contig_retrieve, outlier_remover_folder, num_threads, continue_mode, cpn_cutoff, ctn_cutoff, assembly_mo_list, connections_list, coverage_matrix_list)
 
@@ -614,8 +660,8 @@ def BASALT_main_d(assembly_list, datasets, num_threads, lr_list, hifi_list,
                 for line in open('Assembly_mo_list.txt','r'):
                     assembly_mo_list.append(str(line).strip())
                 for line in open('Assembly_MoDict.txt','r'):
-                    item=str(line).strip().split('\t')[0].strip()
-                    connections_list.append('condense_connections_'+item+'.txt')
+                    item=str(line).strip().split('\t')[-1].strip()
+                    connections_list.append(_resolve_connections_file(item))
 
                 # Contig_retrieve_within_group_main(best_binset_after_contig_retrieve, outlier_remover_folder, num_threads, continue_mode, cpn_cutoff, ctn_cutoff, assembly_mo_list, connections_list, coverage_matrix_list)
 
@@ -758,7 +804,8 @@ def BASALT_main_d(assembly_list, datasets, num_threads, lr_list, hifi_list,
                     # sr_folder='BestBinset_outlier_refined_filtrated_retrieved_polished_sr_bins_seq'
                     # lr_folder='BestBinset_outlier_refined_filtrated_retrieved_long_read'
                     hybrid_re_assembly_main(polished_binset, sr_folder, lr_folder, ram, num_threads)
-                    os.system('rm -rf SPAdes_corrected_reads')
+                    if cleanup_enabled():
+                        os.system('rm -rf SPAdes_corrected_reads')
                     f_cp_m=open('Basalt_checkpoint.txt', 'a')
                     f_cp_m.write('\n'+'9th reassembly done.'+'\t'+str(polished_binset)+'_re-assembly')
                     f_cp_m.close()
@@ -827,13 +874,15 @@ def BASALT_main_d(assembly_list, datasets, num_threads, lr_list, hifi_list,
                         if num > i:
                             i = num
                     
-                    for i in range(1,num+1):
-                        os.system('rm Remained_seq1.fq_'+str(i)+' '+'Remained_seq2.fq_'+str(i))
+                    if cleanup_enabled():
+                        for i in range(1,num+1):
+                            os.system('rm Remained_seq1.fq_'+str(i)+' '+'Remained_seq2.fq_'+str(i))
                     os.system('mkdir Remained_seq')
                     os.system('mv 2nd_Remained_seq1.fq '+pwd+'/Remained_seq/Remained_seq1.fq')
                     os.system('mv 2nd_Remained_seq2.fq '+pwd+'/Remained_seq/Remained_seq2.fq')
                     os.system('tar -zcvf Remained_seq.tar.gz Remained_seq')
-                    os.system('rm -rf Remained_seq')
+                    if cleanup_enabled():
+                        os.system('rm -rf Remained_seq')
                     f_cp_m=open('Basalt_checkpoint.txt', 'a')
                     f_cp_m.write('\n'+'11th 2nd Polishing done!')
                     f_cp_m.close()
@@ -946,12 +995,18 @@ def BASALT_main_d(assembly_list, datasets, num_threads, lr_list, hifi_list,
                     
                     os.system('mv '+file+'2 '+file)
         
-        os.system('rm *quality_report_o.tsv')
+        if cleanup_enabled():
+            os.system('rm *quality_report_o.tsv')
         os.chdir(pwd)
 
         if x == 0:
-            os.system('checkm2 predict -t '+str(num_threads)+' -i '+str(output_folder)+' -x fa -o Final_bestbinset_checkm')
-            os.system('mv '+pwd+'/Final_bestbinset_checkm/quality_report.tsv '+pwd+'/'+str(output_folder)+'/Final_bestbinset_quality_report.tsv')
+            final_report = run_checkm2_predict(
+                output_folder, 'fa', 'Final_bestbinset_checkm', num_threads
+            )
+            shutil.move(
+                final_report,
+                os.path.join(pwd, str(output_folder), 'Final_bestbinset_quality_report.tsv'),
+            )
         else:
             print('Final quality report existed')
 
@@ -959,37 +1014,14 @@ def BASALT_main_d(assembly_list, datasets, num_threads, lr_list, hifi_list,
         f_cp_m.write('\n'+'BASALT done!')
         f_cp_m.close()
     print('BASALT main program accomplished!')
-    print('BASALT will continue to cleanup or compress all the temp files. The results could be found in folder \'Final_bestbinset\'. Please wait for a little bit longer')
+    if cleanup_enabled():
+        print('BASALT will remove disposable scratch while preserving resume and downstream state.')
+    else:
+        print('BASALT cleanup is disabled; intermediate files will be retained.')
 
     ### Cleanup
-    if functional_module == 'all':
-        os.system('rm *.njs *.ndb *.nto *.ntf *.not *.nos')
-        os.mkdir('Coverage_depth_connection_SimilarBin_files_backup')
-        os.system('mv *.depth.txt Coverage_matrix_* Combat_* condense_connections_* Connections_* Similar_bins.txt Coverage_depth_connection_SimilarBin_files_backup')
-        os.system('tar -zcvf Coverage_depth_connection_SimilarBin_files_backup.tar.gz Coverage_depth_connection_SimilarBin_files_backup')
-        os.system('rm -rf Coverage_depth_connection_SimilarBin_files_backup')
-        os.system('rm -rf *_kmer bin_coverage Bin_coverage_after_contamination_removal bin_comparison_folder bin_extract-eleminated-selected_contig Bins_blast_output')
-        os.system('tar -zcvf Group_comparison_files.tar.gz *_comparison_files')
-        os.system('tar -zcvf Group_Bestbinset.tar.gz *_BestBinsSet')
-        # os.system('tar -zcvf Group_checkm.tar.gz *_checkm')
-        os.system('tar -zcvf Group_genomes.tar.gz *_genomes')
-        os.system('rm -rf *_sr_bins_seq')
-        os.system('tar -zcvf Binsets_backup.tar.gz BestBinse*') ###
-        os.system('rm -rf *_comparison_files *_checkm *_genomes *_BestBinset *_BestBinsSet BestBinse* Deep_retrieved_bins coverage_deep_refined_bins S6_coverage_filtration_matrix S6_TNF_filtration_matrix split_blast_output TNFs_deep_refined_bins')
-        os.system('rm *_checkpoint.txt')
-        os.system('rm -rf Merged_seqs_*')
-        os.system('rm -rf *.bt2 Outlier_in_threshold* Summary_threshold* Refined_total_bins_contigs.fa Total_bins.fa') 
-        for i in range(1,20):
-            os.system('rm -rf *_deep_retrieval_'+str(i))
-        os.system('rm -rf *_MP_1 *_MP_2 *_gf_lr_polished *_gf_lr *_gf_lr_mod *_gf_lr_checkm *_long_read')
-        os.system('rm Bin_reads_summary.txt Depth_total.txt Basalt_log.txt Assembly_mo_list.txt Assembly_MoDict.txt *_gf_lr_blasted.txt Bestbinset_list.txt Bin_extract_contigs_after_coverage_filtration.txt Bin_lw.txt Bin_record_error.txt')
-        os.system('rm Bins_folder.txt BLAST_output_error.txt Concoct_* condensed.cytoscape* cytoscape.*')
-        os.system('rm Hybrid_re-assembly_status.txt Mapping_log_* OLC_merged_error_blast_results.txt Potential_contaminted_seq_vari.txt Reassembled_bins_comparison.txt Rejudge_clean.txt')
-        os.system('rm Remained_seq* Remapped_depth_test.txt Re-mapped_depth.txt Remapping.fasta TNFs_exceptional_contigs.txt Total_contigs_after_OLC_reassembly.fa')
-        os.system('rm -rf Polish_*')
-        os.system('rm PE_r1_* PE_r2_*')
-        for i in range(1, len(assembly_list)+1):
-            os.system('rm '+str(i)+'_'+str(assembly_list[i-1]))
+    if functional_module == 'all' and cleanup_enabled():
+        cleanup(assembly_list)
     print('Done!')
 
 if __name__ == '__main__': 

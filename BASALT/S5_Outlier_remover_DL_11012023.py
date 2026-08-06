@@ -13,6 +13,8 @@ from Bio import SeqIO
 import os, copy, math, glob, gc
 import numpy as np
 from multiprocessing import Pool
+from runtime_utils import build_bowtie2_index
+from qc_utils import run_checkm2_predict
 
 
 def TNF_coverage_matrix(bin_contigs, bin_id, contigs_depth, ccc,
@@ -367,7 +369,7 @@ def outlier_predictor(depth_TNF_matrix, contigs_depth, bin_contigs,
     print('Re-mapping')
     total_fa='Remapping.fasta'
     if len(datasets) != 0 or len(hifi_list) != 0:
-        os.system('bowtie2-build '+str(total_fa)+' '+str(total_fa))
+        build_bowtie2_index(total_fa, num_threads)
 
     ###
     bam_sorted1=''
@@ -578,7 +580,7 @@ def checkm_eval(bin_contigs, bin_folder, confirmed_outlier, pwd, num_threads):
         f.close()
     os.chdir(pwd)
 
-    os.system('checkm2 predict -t '+str(num_threads)+' -i '+str(outlier_binset)+' -x fa -o '+str(outlier_binset)+'_checkm')
+    run_checkm2_predict(outlier_binset, 'fa', str(outlier_binset)+'_checkm', num_threads)
     # os.system('checkm lineage_wf -t '+str(num_threads)+' -x fa '+str(outlier_binset)+' '+str(outlier_binset)+'_checkm')
     os.chdir(str(outlier_binset)+'_checkm/')
     print('Parsing '+outlier_binset+' checkm output')

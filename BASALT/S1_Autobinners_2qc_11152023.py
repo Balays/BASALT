@@ -16,6 +16,14 @@ from collections import Counter
 from multiprocessing import Pool
 import shutil
 
+from qc_utils import run_checkm2_predict, run_depth_summarizer
+from runtime_utils import build_bowtie2_index, env_flag
+
+
+def semibin_enabled():
+    """Return whether the optional SemiBin stage is available and enabled."""
+    return not env_flag('BASALT_SKIP_SEMIBIN') and shutil.which('SemiBin2') is not None
+
 def fq2fa_conversion(filename):
     """
     Convert a FASTQ file into a FASTA file using Biopython.
@@ -1295,14 +1303,14 @@ def autobinners(softwares, assembly_file, depth_file, depth_file_list, Coverage_
             # database_path='--database_path ~/databases/CheckM2_database/uniref100.KO.1.dmnd'
             if 'concoct' in str(binset) or 'maxbin' in str(binset):
                 if QC == 'checkm2':
-                    os.system('checkm2 predict -t '+str(num_threads)+' -i '+str(binset)+' -x fasta -o '+str(binset_checkm[binset]))
+                    run_checkm2_predict(binset, 'fasta', binset_checkm[binset], num_threads)
                 elif QC == 'checkm':
                     os.system('checkm lineage_wf -t '+str(num_threads)+' -x fasta '+str(binset)+' '+str(binset_checkm[binset]))
 
                 # os.system('checkm lineage_wf -t '+str(num_threads)+' -x fa '+str(metabat_genome)+' '+str(metabat_checkm))
             elif 'metabat' in str(binset):                
                 if QC == 'checkm2':
-                    os.system('checkm2 predict -t '+str(num_threads)+' -i '+str(binset)+' -x fa -o '+str(binset_checkm[binset]))
+                    run_checkm2_predict(binset, 'fa', binset_checkm[binset], num_threads)
                 elif QC == 'checkm':
                     os.system('checkm lineage_wf -t '+str(num_threads)+' -x fa '+str(binset)+' '+str(binset_checkm[binset]))
 
@@ -1552,7 +1560,7 @@ def autobinner_main(assembly_list, datasets, lr, hifi_list, insert_size, num_thr
                 tok=0
                 if len(datasets_fq) != 0:
                     print('Building Bowtie2 index')
-                    os.system('bowtie2-build '+str(group)+'_'+assembly+' '+str(group)+'_'+assembly)
+                    build_bowtie2_index(str(group)+'_'+assembly, num_threads)
                     print('Done!')
                     tok=1
 
@@ -1578,7 +1586,7 @@ def autobinner_main(assembly_list, datasets, lr, hifi_list, insert_size, num_thr
                     if len(hifi_list) != 0:
                         if tok == 0:
                             print('Building Bowtie2 index')
-                            os.system('bowtie2-build '+str(group)+'_'+assembly+' '+str(group)+'_'+assembly)
+                            build_bowtie2_index(str(group)+'_'+assembly, num_threads)
                             print('Done!')
                             tok=1
 
@@ -1640,30 +1648,14 @@ def autobinner_main(assembly_list, datasets, lr, hifi_list, insert_size, num_thr
                     print('Scorting SAM file(s)')
                     print('CMD: jgi_summarize_bam_contig_depths --outputDepth '+str(group)+'_assembly.depth.txt '+ str(bam_sorted))
                     # logfile.write(str('Command: jgi_summarize_bam_contig_depths --outputDepth '+str(group)+'_assembly.depth.txt '+str(bam_sorted))+'\n')
-                    try:
-                        os.system('jgi_summarize_bam_contig_depths --outputDepth '+str(group)+'_assembly.depth.txt '+str(bam_sorted))
-                        nxxyy=0
-                        for line in open(str(group)+'_assembly.depth.txt','r'):
-                            nxxyy+=1
-                            if nxxyy == 2:
-                                break
-                    except:
-                        os.system('jgi_summarize_bam_contig_depths --outputDepth '+str(group)+'_assembly.depth.txt '+str(bam_sorted))
+                    run_depth_summarizer(str(group)+'_assembly.depth.txt', bam_sorted)
                     ###os.system('/home/emma/software/metabat/jgi_summarize_bam_contig_depths --outputDepth '+str(group)+'_assembly.depth.txt '+str(bam_sorted))    
                     # logfile.close()
                     depth_file_list.append(str(group)+'_assembly.depth.txt')
                 else:
                     print('Scorting SAM file(s)')
                     print('CMD: jgi_summarize_bam_contig_depths --outputDepth '+str(group)+'_assembly.depth.txt '+ str(bam_sorted))
-                    try:
-                        os.system('jgi_summarize_bam_contig_depths --outputDepth '+str(group)+'_assembly.depth.txt '+str(bam_sorted))
-                        nxxyy=0
-                        for line in open(str(group)+'_assembly.depth.txt','r'):
-                            nxxyy+=1
-                            if nxxyy == 2:
-                                break
-                    except:
-                        os.system('jgi_summarize_bam_contig_depths --outputDepth '+str(group)+'_assembly.depth.txt '+str(bam_sorted))
+                    run_depth_summarizer(str(group)+'_assembly.depth.txt', bam_sorted)
                     
                     depth_file_list.append(str(group)+'_assembly.depth.txt')
                     depth_file_list.append(str(group)+'_assembly.depth_1.txt')
@@ -1751,11 +1743,14 @@ def autobinner_main(assembly_list, datasets, lr, hifi_list, insert_size, num_thr
             os.system('rm Coverage_list_*')
 
             # ### SemiBin2
-            print('Performing Semibin2')
+            if semibin_enabled():
+                print('Performing SemiBin2')
+            else:
+                print('Skipping optional SemiBin2 stage')
             # if len(depth_file_list) == 1:
             semibin2_list=[]
             # bam_sorted='x y'
-            if len(lr) != 0 or len(hifi_list) != 0:
+            if semibin_enabled() and (len(lr) != 0 or len(hifi_list) != 0):
                 semibin_folder_name=str(group)+'_'+assembly+'_100_semibin_genomes'
                 if semibin_folder_name not in binning_ds.keys():
                     os.system('SemiBin2 single_easy_bin -i '+str(group)+'_'+assembly+' -b '+str(bam_sorted)+' -o '+str(group)+'_'+assembly+'_100_semibin_genomes --sequencing-type=long_read --processes '+str(num_threads))
@@ -1778,7 +1773,7 @@ def autobinner_main(assembly_list, datasets, lr, hifi_list, insert_size, num_thr
                 #             f=open('Autobinner_checkpoint.txt','a')
                 #             f.write('Binning: '+str(semibin_folder_name)+'\n')
                 #             f.close()
-            else:
+            elif semibin_enabled():
                 semibin_folder_name=str(group)+'_'+assembly+'_100_semibin_genomes'
                 if semibin_folder_name not in binning_ds.keys():
                     os.system('SemiBin2 single_easy_bin -i '+str(group)+'_'+assembly+' -b '+str(bam_sorted)+' -o '+str(group)+'_'+assembly+'_100_semibin_genomes --processes '+str(num_threads))
@@ -1806,7 +1801,12 @@ def autobinner_main(assembly_list, datasets, lr, hifi_list, insert_size, num_thr
 
                 os.chdir(pwd)
                 if QC == 'checkm2':
-                    os.system('checkm2 predict -t '+str(num_threads)+' -i '+str(group)+'_'+assembly+'_'+str(xyz)+'_semibin_genomes -x fa -o '+str(group)+'_'+assembly+'_'+str(xyz)+'_semibin_checkm')
+                    run_checkm2_predict(
+                        str(group)+'_'+assembly+'_'+str(xyz)+'_semibin_genomes',
+                        'fa',
+                        str(group)+'_'+assembly+'_'+str(xyz)+'_semibin_checkm',
+                        num_threads,
+                    )
                 elif QC == 'checkm':
                     os.system('checkm lineage_wf -t '+str(num_threads)+' -x fa '+str(group)+'_'+assembly+'_'+str(xyz)+'_semibin_genomes '+str(group)+'_'+assembly+'_'+str(xyz)+'_semibin_checkm')
 
@@ -1837,7 +1837,12 @@ def autobinner_main(assembly_list, datasets, lr, hifi_list, insert_size, num_thr
                     os.system('mv '+str(itemx)+' '+pwd+'/'+str(group)+'_'+assembly+'_1_SingleContig_genomes')
                 
                 if QC == 'checkm2':
-                    os.system('checkm2 predict -t '+str(num_threads)+' -i '+str(group)+'_'+assembly+'_1_SingleContig_genomes -x fa -o '+str(group)+'_'+assembly+'_1_SingleContig_checkm')
+                    run_checkm2_predict(
+                        str(group)+'_'+assembly+'_1_SingleContig_genomes',
+                        'fa',
+                        str(group)+'_'+assembly+'_1_SingleContig_checkm',
+                        num_threads,
+                    )
                 elif QC == 'checkm':
                     os.system('checkm lineage_wf -t '+str(num_threads)+' -x fa '+str(group)+'_'+assembly+'_1_SingleContig_genomes '+str(group)+'_'+assembly+'_1_SingleContig_checkm')
 

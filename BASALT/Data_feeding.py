@@ -14,6 +14,8 @@ import sys
 import os
 import time
 from collections import Counter
+from runtime_utils import build_bowtie2_index
+from qc_utils import run_checkm2_predict
 
 def merge_bin(binset_folder, bs_id, pwd):
     bins_checkm={}
@@ -226,7 +228,7 @@ def parse_checkm(checkm_containing_folder, pwd):
 
 def mapping(assembly, group, datasets, num_threads, pwd):
     print('Building Bowtie2 index')
-    os.system('bowtie2-build '+assembly+' '+assembly)
+    build_bowtie2_index(assembly, num_threads)
     print('Done!')
     print('-------------')
 
@@ -505,7 +507,9 @@ def data_feeding(extra_binset, datasets, start_index, num_threads,
             os.chdir(pwd)
         elif qc == 'checkm2':
             print('checking '+str(mod_extra_binset[i])+' bins with checkM2')
-            os.system('checkm2 predict -t '+str(num_threads)+' -i '+str(mod_extra_binset[i])+' -x fa -o '+str(mod_extra_binset[i])+'_checkm')
+            run_checkm2_predict(
+                mod_extra_binset[i], 'fa', str(mod_extra_binset[i])+'_checkm', num_threads
+            )
             print('----------')
 
             os.chdir(str(mod_extra_binset[i])+'_checkm')

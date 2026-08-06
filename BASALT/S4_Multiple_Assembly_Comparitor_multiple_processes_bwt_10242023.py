@@ -15,6 +15,9 @@ import pandas as pd
 import numpy as np
 from sklearn.decomposition import PCA
 import glob
+from runtime_utils import build_bowtie2_index
+from bin_utils import is_fasta_file, strip_fasta_suffix
+from qc_utils import run_checkm2_predict
 
 
 def Contigs_aligner(Contigs_assembly1, num_threads):
@@ -1314,7 +1317,7 @@ def final_iteration_mapping(contigs, datasets, num_threads, pwd):
     Perform final read mapping for selected contigs/bins.
     """
     print('Building '+str(contigs)+' Bowtie2 index')
-    os.system('bowtie2-build '+str(contigs)+' '+str(contigs))
+    build_bowtie2_index(contigs, num_threads)
     for i in range(1, len(datasets)+1):
         os.system('bowtie2 -p '+str(num_threads)+' -x '+str(contigs)+' -1 '+str(datasets[str(i)][0])+' -2 '+str(datasets[str(i)][1])+' -S '+str(contigs)+'-'+str(i)+'.sam -q --no-unal')
         os.system('samtools view -@ '+str(num_threads)+' -b -S '+str(contigs)+'-'+str(i)+'.sam -o '+str(contigs)+'-'+str(i)+'.bam')
@@ -1411,7 +1414,7 @@ def mapping(bin, datasets, num_threads, pwd):
     Map short reads to a given bin using bowtie2.
     """
     print('Building '+str(bin)+' Bowtie2 index')
-    os.system('bowtie2-build '+str(bin)+' '+str(bin))
+    build_bowtie2_index(bin, num_threads)
     for i in range(1, len(datasets)+1):
         os.system('bowtie2 -p '+str(num_threads)+' -x '+str(bin)+' -1 '+str(datasets[str(i)][0])+' -2 '+str(datasets[str(i)][1])+' -S '+str(bin)+'-'+str(i)+'.sam -q --no-unal')
         os.system('samtools view -@ '+str(num_threads)+' -b -S '+str(bin)+'-'+str(i)+'.sam -o '+str(bin)+'-'+str(i)+'.bam')
@@ -1980,7 +1983,9 @@ def final_binset_comparitor(final_iteration_folder,
     if y == 0:
         os.chdir(pwd)
         ###
-        os.system('checkm2 predict -t '+str(num_threads)+' -i '+str(final_iteration_folder)+' -x fa -o '+str(final_iteration_folder)+'_checkm')
+        run_checkm2_predict(
+            final_iteration_folder, 'fa', str(final_iteration_folder)+'_checkm', num_threads
+        )
         # os.system('checkm lineage_wf -t '+str(num_threads)+' -x fa '+str(final_iteration_folder)+' '+str(final_iteration_folder)+'_checkm') ###
         ###
         os.system('mv '+str(final_iteration_folder)+'_checkm/quality_report.tsv '+pwd+'/'+final_iteration_folder)
@@ -2397,21 +2402,20 @@ def record_bin_coverage(best_binset_from_multi_assemblies, coverage_file):
     pwd=os.getcwd()
 
     #### In some cases, the program accidently stops, causing the bins num in checkm file low that the bins on the folder
-    bin_checkm_temp=[]
+    bin_checkm_temp=set()
     os.chdir(pwd+'/'+str(best_binset_from_multi_assemblies))
     for root, dirs, files in os.walk(pwd+'/'+str(best_binset_from_multi_assemblies)):
         for file in files:
             if 'quality_report.tsv' in file:
                 for line in open(file, 'r'):
                     bins=str(line).strip().split('\t')[0]
-                    bin_checkm_temp.append(bins+'.fa')
-                    # bin_checkm_temp.append(bins+'.fasta')
+                    if bins != 'Bin_ID':
+                        bin_checkm_temp.add(strip_fasta_suffix(bins))
     
     for root, dirs, files in os.walk(pwd+'/'+str(best_binset_from_multi_assemblies)):
         for file in files:
-            hz=file.split('.')[-1]
-            if 'fa' in hz or 'fna' in hz:
-                if str(file) not in bin_checkm_temp:
+            if is_fasta_file(file):
+                if strip_fasta_suffix(file) not in bin_checkm_temp:
                     os.system('rm '+str(file))
     os.chdir(pwd)
     ####
@@ -2432,8 +2436,7 @@ def record_bin_coverage(best_binset_from_multi_assemblies, coverage_file):
             # except:
             #     hz=file.split('.')[-1]
 
-            hz=file.split('.')[-1]
-            if 'fa' in hz or 'fna' in hz:
+            if is_fasta_file(file):
                 m+=1
                 bin_contigs[file]={}
                 bin_contigs_mock[file]={}
@@ -2747,6 +2750,29 @@ def multiple_assembly_comparitor_main(Contig_list_o, BestBinSet_list_o,
         Writes comparison and selection results to disk.
     """
     pwd=os.getcwd()
+    resume_iteration = os.environ.get('BASALT_INITIAL_DREP_START_ITERATION', '').strip()
+    if step == 'initial_drep' and resume_iteration:
+        resume_bin_folder = 'Iteration_'+resume_iteration+'_genomes'
+        resume_contigs = 'Contigs_iteration_'+resume_iteration+'.fa'
+        resume_coverage = 'Coverage_matrix_for_binning_iteration_'+resume_iteration+'.txt'
+        missing = [
+            path for path in (resume_bin_folder, resume_contigs, resume_coverage)
+            if not os.path.exists(os.path.join(pwd, path))
+        ]
+        if missing:
+            raise RuntimeError(
+                'Cannot resume initial dereplication from iteration {}: missing {}'.format(
+                    resume_iteration, ', '.join(missing)
+                )
+            )
+        message = 'Resuming initial dereplication from '+resume_bin_folder
+        print(message)
+        with open('Basalt_log.txt', 'a') as resume_log:
+            resume_log.write(message+'\n')
+        initial_drep_final_comparitor(
+            resume_bin_folder, [resume_coverage], datasets, num_threads, pwd, step
+        )
+        return
     try:
         flog=open('Basalt_log.txt','a')
     except:
@@ -2787,12 +2813,14 @@ def multiple_assembly_comparitor_main(Contig_list_o, BestBinSet_list_o,
         for i in range(0, len(BestBinSet_list_o)):
             folder_name=str(BestBinSet_list_o[i])
             xyzzz=0
-            os.chdir(pwd+'/'+folder_name)
-            for root, dirs, files in os.walk(pwd+'/'+folder_name):
+            folder_path=os.path.join(pwd, folder_name)
+            if not os.path.isdir(folder_path):
+                print('Skipping missing BestBinsSet folder: '+folder_name)
+                continue
+            os.chdir(folder_path)
+            for root, dirs, files in os.walk(folder_path):
                 for file in files:
-                    hz = file.split('.')[-1]
-                    
-                    if 'fa' in hz:
+                    if is_fasta_file(file):
                         xyzzz+=1
             os.chdir(pwd)
             if xyzzz != 0:
@@ -2809,6 +2837,7 @@ def multiple_assembly_comparitor_main(Contig_list_o, BestBinSet_list_o,
                 flog=open('Basalt_log.txt','w')
             flog.write('Error! There is no qualitied bin after autobinning process. Please check your data'+'\n')
             flog.close()
+            raise RuntimeError('No FASTA bins were found after autobinning')
 
         CC_binset_list, CC_contig_list, binset_coverage_dict, binset_coverage_total, total_core_contigs =[], [], {}, {}, {}
         for i in range(0, len(BestBinSet_list)):

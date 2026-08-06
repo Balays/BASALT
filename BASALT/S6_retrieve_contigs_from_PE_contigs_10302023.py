@@ -12,6 +12,7 @@ import pandas as pd
 # import seaborn as sns
 # import matplotlib.pyplot as plt
 from Bio import SeqIO
+from qc_utils import run_checkm2_predict
 import os, threading, glob, copy, gc
 from sklearn.decomposition import PCA
 import numpy as np
@@ -767,7 +768,10 @@ def bin_comparison(original_bin_folder, new_bins_checkm, new_bin_folder, refinem
                 # print(str(contig_positive_suspect))
                 # os.system('checkm2 predict -t '+str(num_threads)+' -i '+str(org_bin_id)+'_deep_retrieval -x fa -o '+str(org_bin_id)+'_deep_retrieval_checkm')
                 # os.chdir(pwd+'/'+str(org_bin_id)+'_deep_retrieval_checkm/')
-                os.system('checkm2 predict -t '+str(num_threads)+' -i Deep_retrieved_bins_split -x fa -o Deep_retrieved_bins_split_checkm')
+                run_checkm2_predict(
+                    'Deep_retrieved_bins_split', 'fa',
+                    'Deep_retrieved_bins_split_checkm', num_threads,
+                )
                 # n = 0
                 # for line in open('quality_report.tsv','r'):
                 #     n+=1
@@ -970,7 +974,10 @@ def bin_comparison(original_bin_folder, new_bins_checkm, new_bin_folder, refinem
                         xxxx+=1
 
                 if xxxx>=1:
-                    os.system('checkm2 predict -t '+str(num_threads)+' -i Deep_retrieved_bins -x fa -o Deep_retrieved_bins_checkm')
+                    run_checkm2_predict(
+                        'Deep_retrieved_bins', 'fa', 'Deep_retrieved_bins_checkm',
+                        num_threads,
+                    )
 
                     os.chdir(pwd+'/Deep_retrieved_bins_checkm/')
                     n=0
@@ -1728,7 +1735,10 @@ def parse_bin_in_bestbinset(assemblies_list, binset, outlier_remover_folder, PE_
         print('Checking quality of retrieved bins')
         # checkm(str(binset)+'_retrieved', num_threads)
         # os.system('checkm lineage_wf -t '+str(num_threads)+' -x fa '+str(binset)+'_retrieved '+str(binset)+'_retrieved_checkm')
-        os.system('checkm2 predict -t '+str(num_threads)+' -i '+str(binset)+'_retrieved -x fa -o '+str(binset)+'_retrieved_checkm')
+        run_checkm2_predict(
+            str(binset)+'_retrieved', 'fa', str(binset)+'_retrieved_checkm',
+            num_threads,
+        )
         f_cp=open('S6_checkpoint.txt','a')
         f_cp.write('6th bins quality check done'+'\n')
         f_cp.close()

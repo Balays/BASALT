@@ -1,5 +1,10 @@
 # BASALT: Binning Across a Series of Assemblies Toolkit
 
+> This branch includes a small, publication-oriented set of large-run
+> correctness, performance, storage, and resume patches. See
+> [LARGE_RUN_PATCHES.md](LARGE_RUN_PATCHES.md) for the exact scope and new
+> command-line options.
+
 ## 📣 News
 
 * **[2025/12/16]**:🤗 We release **BASALT V1.2.0** under MIT LICENSE.

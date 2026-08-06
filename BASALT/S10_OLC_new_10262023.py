@@ -20,6 +20,8 @@ import os, copy
 from sklearn.decomposition import PCA
 import numpy as np
 import pandas as pd
+from runtime_utils import build_bowtie2_index
+from qc_utils import run_checkm2_predict
 from multiprocessing import Pool
 
 
@@ -1238,7 +1240,9 @@ def OLC_elongation_main(target_bin, eliminated_bin, target_bin_checkm,
                 xt+=1
 
         if xt > 0:
-            os.system('checkm2 predict -t 1 -i '+target_bin+'_merged -x fa -o '+str(target_bin)+'_checkm --force')
+            run_checkm2_predict(
+                target_bin+'_merged', 'fa', str(target_bin)+'_checkm', 1
+            )
             test_checkm=parse_checkm(target_bin+'_checkm', pwd)
             bin_checkm.update(test_checkm)
 
@@ -1459,7 +1463,7 @@ def mapping(total_fa, datasets_list, fq, num_threads):
     None
         Writes bin-specific FASTQ files to the current working directory.
     """
-    os.system('bowtie2-build '+str(total_fa)+' '+str(total_fa))
+    build_bowtie2_index(total_fa, num_threads)
     n = 0
     for item in datasets_list.keys():
         n+=1
@@ -1981,7 +1985,10 @@ def reassembly_OLC_main(target_bin_folder, step, bin_comparison_folder,
                 os.system('mv '+pwd+'/'+target_bin_folder+'_temp/'+file+' '+pwd+'/'+target_bin_folder)
 
     os.chdir(pwd)
-    os.system('checkm2 predict -t '+str(num_threads)+' -i '+target_bin_folder+'_OLC  -x fa -o '+target_bin_folder+'_OLC_checkm --force')
+    run_checkm2_predict(
+        target_bin_folder+'_OLC', 'fa', target_bin_folder+'_OLC_checkm',
+        num_threads,
+    )
     bin_checkm=parse_checkm(target_bin_folder+'_OLC_checkm', pwd)
     bin_checkm.update(bestbinset_checkm_org)
 

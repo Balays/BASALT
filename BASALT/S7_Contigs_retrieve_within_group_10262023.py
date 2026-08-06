@@ -12,6 +12,7 @@ import pandas as pd
 # import seaborn as sns
 # import matplotlib.pyplot as plt
 from Bio import SeqIO
+from qc_utils import run_checkm2_predict
 import os, threading, copy
 from sklearn.decomposition import PCA
 import numpy as np
@@ -571,7 +572,7 @@ def checkm(bin_folder, num_threads):
     """
     pwd=os.getcwd()
     # os.system('checkm lineage_wf -t '+str(num_threads)+' -x fa '+str(bin_folder)+' '+str(bin_folder)+'_checkm')
-    os.system('checkm2 predict -t '+str(num_threads)+' -i '+str(bin_folder)+' -x fa -o '+str(bin_folder)+'_checkm')
+    run_checkm2_predict(bin_folder, 'fa', str(bin_folder)+'_checkm', num_threads)
 
     print('Parsing '+bin_folder+' checkm output')
     refined_checkm={}
@@ -893,7 +894,10 @@ def bin_comparison(original_bin_folder, new_bins_checkm, new_bin_folder,
                 f.close()
 
         os.chdir(pwd)
-        os.system('checkm2 predict -t '+str(num_threads)+' -i '+str(org_bin_id)+'_deep_retrieval -x fa -o '+str(org_bin_id)+'_deep_retrieval_checkm')
+        run_checkm2_predict(
+            str(org_bin_id)+'_deep_retrieval', 'fa',
+            str(org_bin_id)+'_deep_retrieval_checkm', num_threads,
+        )
         os.chdir(pwd+'/'+str(org_bin_id)+'_deep_retrieval_checkm')
         n=0
         for line in open('quality_report.tsv', 'r'):
@@ -969,7 +973,10 @@ def bin_comparison(original_bin_folder, new_bins_checkm, new_bin_folder,
 
     replace_bin = {}
     if xxxx>=1:
-        os.system('checkm2 predict -t '+str(num_threads)+' -i Deep_retrieved_bins_'+str(level_num)+' -x fa -o Deep_retrieved_bins_'+str(level_num)+'_checkm')
+        run_checkm2_predict(
+            'Deep_retrieved_bins_'+str(level_num), 'fa',
+            'Deep_retrieved_bins_'+str(level_num)+'_checkm', num_threads,
+        )
         os.chdir(pwd+'/Deep_retrieved_bins_checkm/')
         n=0
         for line in open('quality_report.tsv', 'r'):

@@ -14,6 +14,7 @@ import sys
 import os
 import argparse
 from glob import glob
+from runtime_utils import ensure_min_free_gb
 
 
 # ---------------------------------------------------------------------------
@@ -76,8 +77,37 @@ parser.add_argument('-c', '--coverage-list', type=str, dest='coverage_list',
                     help='List of depth file for refinement. Coverage file(s) could be generated from data feeding modole. e.g.: -c Coverage_matrix_for_binning_1_assembly.fa.txt,Coverage_matrix_for_binning_2_assembly.fa.txt')
 parser.add_argument('-b', '--binsets-list', type=str, dest='binsets_list',
                     help='List of binsets for de-replication. Binset depth file(s) could be generated from data feeding modole. e.g.: -b 1_assembly_BestBinsSet,2_assembly_BestBinsSet')
+parser.add_argument('--min-free-gb', type=float, default=10.0,
+                    help='Refuse new large operations at or below this free-space threshold (default: 10 GB; 0 disables).')
+parser.add_argument('--cleanup', dest='cleanup_enabled', action='store_true', default=True,
+                    help='Remove disposable scratch while preserving restart state (default: enabled).')
+parser.add_argument('--no-cleanup', dest='cleanup_enabled', action='store_false',
+                    help='Keep disposable intermediate files for debugging.')
+parser.add_argument('--gzip-long-read-intermediates', action='store_true',
+                    help='Gzip completed per-bin long-read FASTQ and mapping-report intermediates.')
+parser.add_argument('--gzip-level', type=int, choices=range(1, 10), default=1,
+                    help='Compression level for long-read intermediates (default: 1).')
+parser.add_argument('--hybrid-skip-file', type=str, default='',
+                    help='Optional file of bin IDs whose hybrid reassembly should be skipped.')
+parser.add_argument('--skip-semibin', action='store_true',
+                    help='Skip the optional SemiBin2 autobinning stage.')
+parser.add_argument('--initial-drep-start-iteration', type=int, default=0,
+                    help='Resume initial dereplication from an existing Iteration_N checkpoint.')
 
 args = parser.parse_args()
+if args.hybrid_skip_file and not os.path.isfile(args.hybrid_skip_file):
+    parser.error('--hybrid-skip-file does not exist: '+args.hybrid_skip_file)
+os.environ['BASALT_MIN_FREE_GB'] = str(args.min_free_gb)
+os.environ['BASALT_CLEANUP_ENABLED'] = '1' if args.cleanup_enabled else '0'
+os.environ['BASALT_GZIP_LONG_READ_FASTQ'] = '1' if args.gzip_long_read_intermediates else '0'
+os.environ['BASALT_GZIP_LONG_READ_REPORTS'] = '1' if args.gzip_long_read_intermediates else '0'
+os.environ['BASALT_GZIP_LEVEL'] = str(args.gzip_level)
+os.environ['BASALT_HYBRID_SKIP_FILE'] = args.hybrid_skip_file
+os.environ['BASALT_SKIP_SEMIBIN'] = '1' if args.skip_semibin else '0'
+os.environ['BASALT_INITIAL_DREP_START_ITERATION'] = (
+    str(args.initial_drep_start_iteration) if args.initial_drep_start_iteration > 0 else ''
+)
+ensure_min_free_gb(os.getcwd(), args.min_free_gb, context='BASALT startup')
 assemblies=args.assemblies
 sr_datasets=args.sr_datasets
 long_reads_list=args.long_datasets

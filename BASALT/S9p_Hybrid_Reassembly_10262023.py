@@ -9,8 +9,15 @@ and assembly quality.
 """
 
 from Bio import SeqIO
-import sys, os, threading, copy, math
+import os
 from multiprocessing import Pool
+from runtime_utils import (
+    bounded_parallel_resources,
+    ensure_min_free_gb,
+    hybrid_skip_reason,
+    load_id_set,
+)
+from qc_utils import run_checkm2_predict
 # from glob import glob
 
 
@@ -143,10 +150,17 @@ def assembly_mul(bins_seq_folder, bin_seq, item, reassembly_bin_folder,
 
     os.system('fq2fa --merge --filter '+str(pwd)+'/'+str(bins_seq_folder)+'/'+str(bin_seq[item][0])+' '+str(pwd)+'/'+str(bins_seq_folder)+'/'+str(bin_seq[item][1])+' '+str(item)+'_idba.fa')
     n=0
+    seq_len=None
     for record in SeqIO.parse(str(item)+'_idba.fa','fasta'):
         n+=1
         if n == 1:
             seq_len=len(record.seq)
+
+    if seq_len is None:
+        print('Skipping IDBA reassembly for '+str(item)+': no reads after conversion')
+        os.system('rm -rf '+str(item)+'_spades_reassembly')
+        os.system('rm -f '+str(item)+'_idba.fa')
+        return
     
     if seq_len <= 125:
         os.system('idba_ud -r '+str(item)+'_idba.fa -o '+str(item)+'_idba_reassembly --num_threads '+str(num_threads)+' --min_contig 1000')
@@ -187,16 +201,11 @@ def SR_reassembly(bin_seq, reassembly_bin_folder, num_threads,
     dict
         Mapping ``bin_id -> dict(checkm_metrics)`` for reassembled bins.
     """
-    num_project=1
-    if num_threads >= 40:
-        if num_threads < 60:
-            num_project=2
-        else:
-            num_project=math.ceil(num_threads/30)
-    if ram >= 64:
-        num_project2=math.ceil(ram/55)
-        if num_project2 < num_project:
-            num_project=num_project2
+    num_project, threads_per_project, ram_per_project = bounded_parallel_resources(
+        num_threads, ram, len(bin_seq), target_threads=24, target_ram=48,
+    )
+    if num_project == 0:
+        return
     
     os.system('mkdir SPAdes_corrected_reads')
     # for item in bin_seq.keys():
@@ -205,15 +214,31 @@ def SR_reassembly(bin_seq, reassembly_bin_folder, num_threads,
     #     os.system('mv '+pwd+'/'+str(item)+'_SPAdes_corrected_reads/corrected/'+str(item)+'_seq_R2* '+pwd+'/SPAdes_corrected_reads/'+str(item)+'_seq_R2.fq.gz')
     #     os.system('rm -rf '+str(item)+'_SPAdes_corrected_reads')
 
-    print('Processing', str(num_project), 'simultaneously')
+    print(
+        'Processing', str(num_project), 'simultaneously with',
+        str(threads_per_project), 'threads and',
+        str(ram_per_project), 'GB RAM per project'
+    )
     pool=Pool(processes=num_project)
-    t_p_p=math.ceil(num_threads/num_project)
+    results=[]
     for item in bin_seq.keys():
         print('Reassembling '+str(item))
-        pool.apply_async(assembly_mul, args=(bins_seq_folder, bin_seq, item, reassembly_bin_folder, pwd, t_p_p, ram))
+        results.append(
+            pool.apply_async(
+                assembly_mul,
+                args=(
+                    bins_seq_folder, bin_seq, item, reassembly_bin_folder, pwd,
+                    threads_per_project, ram_per_project,
+                ),
+            )
+        )
         # assembly_mul('SPAdes_corrected_reads', bins_seq_folder, bin_seq, item, reassembly_bin_folder, pwd, t_p_p, ram)
     pool.close()
-    pool.join()
+    try:
+        for result in results:
+            result.get()
+    finally:
+        pool.join()
 
 def hybrid_bin_comparison(paired_bins, bin_checkm):
     # pwd=os.getcwd()
@@ -312,7 +337,8 @@ def hybrid_bin_comparison(paired_bins, bin_checkm):
     return best_bin, best_bin_checkm
 
 def hybrid_assembly_mul(sr_folder, bin_seq, item, bin_lr_reads, lr_folder,
-                        reassembly_bin_folder, pwd, num_threads, ram):
+                        reassembly_bin_folder, pwd, num_threads, ram,
+                        hybrid_skip_ids=None):
     """
     Assemble hybrid (short + long read) data for a single bin using SPAdes
     (CheckM2 branch).
@@ -345,6 +371,22 @@ def hybrid_assembly_mul(sr_folder, bin_seq, item, bin_lr_reads, lr_folder,
         ``reassembly_bin_folder`` and uses ``SPAdes_corrected_reads``
         to store corrected short reads.
     """
+    existing_output = os.path.join(
+        pwd,
+        reassembly_bin_folder,
+        str(item)+'_SPAdes_hybrid_re-assembly_contigs.fa',
+    )
+    skip_reason = hybrid_skip_reason(existing_output, item, hybrid_skip_ids)
+    if skip_reason:
+        print('Skipping hybrid reassembly for '+str(item)+': '+skip_reason)
+        return
+
+    ensure_min_free_gb(
+        pwd,
+        float(os.environ.get('BASALT_MIN_FREE_GB', '0')),
+        context='hybrid reassembly for '+str(item),
+    )
+
     try:
         os.system('gzip -d '+pwd+'/SPAdes_corrected_reads/'+str(item)+'_seq_R1.fq.gz')
         os.system('gzip -d '+pwd+'/SPAdes_corrected_reads/'+str(item)+'_seq_R2.fq.gz')
@@ -468,26 +510,41 @@ def hybrid_re_assembly_main(binset_folder, sr_folder, lr_folder,
                         bin_lr_reads[bin_id]=file
             os.chdir(pwd)
 
-            ####
-            num_project=1
-            if num_threads >= 40:
-                if num_threads < 60:
-                    num_project=2
-                else:
-                    num_project=math.ceil(num_threads/30)
-            if ram >= 64:
-                num_project2=math.ceil(ram/55)
-                if num_project2 < num_project:
-                    num_project=num_project2
-            
-            print('Processing', str(num_project), 'simultaneously')
-            pool=Pool(processes=num_project)
-            t_p_p=math.ceil(num_threads/num_project)
-            for item in bin_lr_reads.keys():
-                print('Reassembling '+str(item))
-                pool.apply_async(hybrid_assembly_mul, args=(sr_folder, bin_seq, item, bin_lr_reads, lr_folder, reassembly_bin_folder, pwd, t_p_p, ram))
-            pool.close()
-            pool.join()
+            num_project, threads_per_project, ram_per_project = (
+                bounded_parallel_resources(
+                    num_threads, ram, len(bin_lr_reads),
+                    target_threads=24, target_ram=48,
+                )
+            )
+            hybrid_skip_file=os.environ.get('BASALT_HYBRID_SKIP_FILE', '').strip()
+            hybrid_skip_ids=load_id_set(hybrid_skip_file)
+
+            if num_project > 0:
+                print(
+                    'Processing', str(num_project), 'simultaneously with',
+                    str(threads_per_project), 'threads and',
+                    str(ram_per_project), 'GB RAM per project'
+                )
+                pool=Pool(processes=num_project)
+                results=[]
+                for item in bin_lr_reads.keys():
+                    print('Reassembling '+str(item))
+                    results.append(
+                        pool.apply_async(
+                            hybrid_assembly_mul,
+                            args=(
+                                sr_folder, bin_seq, item, bin_lr_reads, lr_folder,
+                                reassembly_bin_folder, pwd, threads_per_project,
+                                ram_per_project, hybrid_skip_ids,
+                            ),
+                        )
+                    )
+                pool.close()
+                try:
+                    for result in results:
+                        result.get()
+                finally:
+                    pool.join()
 
             f=open('Hybrid_re-assembly_status.txt','a')
             f.write('Hybrid-assembly done!'+'\n')
@@ -499,7 +556,10 @@ def hybrid_re_assembly_main(binset_folder, sr_folder, lr_folder,
             x=1
     
     if x == 0:
-        os.system('checkm2 predict -t '+str(num_threads)+' -i '+str(binset_folder)+'_re-assembly_binset -x fa -o '+str(binset_folder)+'_re-assembly_binset_checkm')
+        run_checkm2_predict(
+            str(binset_folder)+'_re-assembly_binset', 'fa',
+            str(binset_folder)+'_re-assembly_binset_checkm', num_threads,
+        )
         # os.system('checkm lineage_wf -t '+str(num_threads)+' -x fa '+str(binset_folder)+'_re-assembly_binset '+str(binset_folder)+'_re-assembly_binset_checkm')
         f=open('Hybrid_re-assembly_status.txt','a')
         f.write('Re-assembly quality evaluation done!'+'\n')
