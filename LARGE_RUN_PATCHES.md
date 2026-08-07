@@ -20,7 +20,7 @@ For citation and reproducibility:
 - DogMAG generalized source-code snapshot: commit
   `bdd4106a398db69bee83ea9ad1d331b00c041122` in this fork.
 - Publication working branch: `DogMAG-article-clean`.
-- Paper-facing frozen branch: `DogMAG-paper-v1.0` (created from the final
+- Paper-facing snapshot branch: `DogMAG-paper-v1.0` (created from the final
   publication-documentation state; the BASALT source code itself is identical
   to the `bdd4106a` snapshot).
 
