@@ -5,6 +5,45 @@ reviewed subset of changes for large, restartable CheckM2-based runs. It does
 not contain dataset-specific paths, identifiers, manifests, recovery scripts,
 or checkpoint edits.
 
+## DogMAG publication snapshot
+
+This fork is the cleaned, publication-oriented representation of the
+generalized BASALT modifications used while producing the DogMAG resource.
+The production analysis also required dataset-specific recovery and checkpoint
+interventions; those are intentionally not part of this BASALT fork and belong
+with the DogMAG project workflow provenance instead.
+
+For citation and reproducibility:
+
+- Upstream BASALT base: `EMBL-PKU/BASALT` commit
+  `5f51ba3780749be2fbb7c868df505548f894f7e4`.
+- DogMAG generalized source-code snapshot: commit
+  `bdd4106a398db69bee83ea9ad1d331b00c041122` in this fork.
+- Publication working branch: `DogMAG-article-clean`.
+- Paper-facing frozen branch: `DogMAG-paper-v1.0` (created from the final
+  publication-documentation state; the BASALT source code itself is identical
+  to the `bdd4106a` snapshot).
+
+To inspect the exact generalized BASALT source snapshot:
+
+```bash
+git clone https://github.com/Balays/BASALT.git
+cd BASALT
+git checkout bdd4106a398db69bee83ea9ad1d331b00c041122
+```
+
+For the paper-facing repository state, including publication notes and focused
+CI, use:
+
+```bash
+git checkout DogMAG-paper-v1.0
+```
+
+The original upstream installation instructions remain below in `README.md`.
+They describe the upstream BASALT distribution; users reproducing the DogMAG
+software snapshot should clone this fork and check out the commit or paper
+branch above rather than cloning upstream again.
+
 ## Scope
 
 - Build Bowtie2 indexes with the requested thread count and checked exit status.
@@ -61,5 +100,6 @@ python -m unittest discover -s tests -v
 python -m compileall -q BASALT
 ```
 
-Full end-to-end validation still requires the external BASALT toolchain and
-representative sequencing input data.
+A lightweight GitHub Actions workflow runs these checks on the DogMAG paper
+branches. Full end-to-end validation still requires the external BASALT
+toolchain and representative sequencing input data.
